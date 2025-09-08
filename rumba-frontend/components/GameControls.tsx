@@ -15,6 +15,10 @@ interface GameControlsProps {
   onReset: () => void;
   onSolution: () => void;
   onNewGame: () => void;
+  onInvitePlayer?: () => void;
+  onJoinGame?: () => void;
+  multiplayerEnabled?: boolean;
+  currentGameCode?: string;
 }
 
 const GameControls: React.FC<GameControlsProps> = ({
@@ -29,6 +33,10 @@ const GameControls: React.FC<GameControlsProps> = ({
   onReset,
   onSolution,
   onNewGame,
+  onInvitePlayer,
+  onJoinGame,
+  multiplayerEnabled = true,
+  currentGameCode,
 }) => {
   const [showRules, setShowRules] = useState(false);
   
@@ -139,6 +147,50 @@ const GameControls: React.FC<GameControlsProps> = ({
           <span>🎮</span>
           <span>New Game</span>
         </button>
+
+        {/* Multiplayer Actions */}
+        {multiplayerEnabled && (
+          <div className="space-y-3">
+            <div className="text-center text-sm font-medium text-gray-600 flex items-center justify-center gap-2">
+              <span>👥</span>
+              <span>Multiplayer</span>
+            </div>
+            
+            {currentGameCode ? (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <div className="text-center">
+                  <p className="text-sm font-medium text-green-800 mb-1">
+                    🎯 Playing: {currentGameCode}
+                  </p>
+                  <button
+                    onClick={onInvitePlayer}
+                    className="text-sm text-green-600 hover:text-green-700 underline"
+                  >
+                    Share with friends
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={onInvitePlayer}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 active:bg-blue-700 transition-all duration-200 text-sm shadow-md active:scale-95"
+                >
+                  <span>📤</span>
+                  <span>Invite</span>
+                </button>
+                
+                <button
+                  onClick={onJoinGame}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 active:bg-green-700 transition-all duration-200 text-sm shadow-md active:scale-95"
+                >
+                  <span>📥</span>
+                  <span>Join</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Rules Toggle */}
         <button

@@ -1,8 +1,8 @@
-Tuyệt — dưới đây là **bản step-by-step, gọn – rõ – chạy được** để Claude Code dựng nhanh backend + client cho MVP “Rumba” 1–2 người chơi. (Bạn có thể giữ ngôn ngữ/stack tuỳ ý: Node/Express + Postgres/Prisma hoặc Laravel + MySQL; đặc tả dưới neutral.)
+Bản step-by-step, gọn – rõ – chạy được để Claude Code dựng nhanh backend + client cho MVP “Rumba” 1–2 người chơi. (Bạn có thể giữ ngôn ngữ/stack tuỳ ý: Node/Express + Postgres/Prisma hoặc Laravel + MySQL; đặc tả dưới neutral.)
 
 # 0) Chuẩn bị nhanh (suggestion)
 
-* **Server**: Node 20 + Express + Prisma + PostgreSQL (hoặc Laravel 10 + Eloquent + MySQL).
+* **Server**: Node 20 + nestjs + typeorm + Sqlite
 * **Realtime**: WebSocket (Socket.IO hoặc ws).
 * **Client**: React (app MVP hiện có).
 * **Build**: Docker Compose (db + api + web).
@@ -343,5 +343,3 @@ x-user-id: 91b…-uuid
 * **Spectator mode**: nhiều người xem, chỉ phát `current_json` (ẩn solution).
 * **Matchmaking**: lobby tìm đối thủ ngẫu nhiên.
 * **Analytics**: thời gian hoàn thành, số nước đi, heatmap ô sai.
-
-> Bạn chỉ cần copy block này vào Claude Code, lần lượt implement theo **mục 9 (checklist)** là ra sản phẩm MVP hoàn chỉnh (server + client + realtime + 2 người chơi + hiển thị “ô trống của đối thủ”).

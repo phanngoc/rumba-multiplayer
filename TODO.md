@@ -10,3 +10,15 @@ game_state chứa trạng thái hiện tại của game (PLAYING, COMPLETED, ERR
 - Ở màn hình user thứ 2, có 1 button "Join game", khi click vào sẽ hiển thị 1 modal, modal này có 1 input để nhập code.
 - Ở màn hình user1 sẽ hiển thị số ô còn trống của user2, để tạo độ gay cấn khi chơi, thúc user1 phải động não và chơi nhanh hơn.
 
+## Thêm tính năng
+-- (Tuỳ chọn) nhật ký nước đi
+CREATE TABLE game_moves (
+  id            UUID PRIMARY KEY,
+  game_id       UUID NOT NULL REFERENCES games(id),
+  user_id       UUID NOT NULL REFERENCES users(id),
+  r             INT NOT NULL,
+  c             INT NOT NULL,
+  value         CHAR(1) CHECK (value IN ('X','O',' ')), -- ' ' = EMPTY
+  created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+);
+```
