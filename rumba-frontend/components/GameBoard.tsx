@@ -44,6 +44,21 @@ const GameBoard: React.FC<GameBoardProps> = ({
     }
   };
 
+  const countXO = (cells: CellValue[]) => {
+    const xCount = cells.filter(cell => cell === CellValue.X).length;
+    const oCount = cells.filter(cell => cell === CellValue.O).length;
+    return { xCount, oCount };
+  };
+
+  const getRowCount = (rowIndex: number) => {
+    return countXO(board[rowIndex]);
+  };
+
+  const getColumnCount = (colIndex: number) => {
+    const column = board.map(row => row[colIndex]);
+    return countXO(column);
+  };
+
   const getCellStyles = (row: number, col: number, value: CellValue) => {
     // Responsive cell size based on screen size and board size
     const sizeClasses = {
@@ -127,46 +142,145 @@ const GameBoard: React.FC<GameBoardProps> = ({
 
   return (
     <div className="flex flex-col items-center space-y-4 w-full max-w-full">
-      {/* Game Board */}
+      {/* Game Board with Counters */}
       <div className="w-full flex justify-center px-2">
-        <div 
-          className={`
-            game-board inline-grid gap-1 sm:gap-2 p-3 sm:p-4 
-            bg-gradient-to-br from-gray-50 to-gray-100 
-            rounded-xl shadow-lg border border-gray-200
-            max-w-full overflow-hidden
-          `}
-          style={{ 
-            gridTemplateColumns: `repeat(${size}, 1fr)`,
-            maxWidth: size === 8 ? '90vw' : size === 6 ? '85vw' : '80vw'
-          }}
-        >
-          {board.map((row, rowIndex) =>
-            row.map((cell, colIndex) => (
-              <button
-                key={`${rowIndex}-${colIndex}`}
-                className={`game-cell ${getCellStyles(rowIndex, colIndex, cell)}`}
-                onClick={() => handleClick(rowIndex, colIndex)}
-                onContextMenu={(e) => handleContextMenu(e, rowIndex, colIndex)}
-                onTouchStart={() => handleTouchStart(rowIndex, colIndex)}
-                onTouchEnd={() => handleTouchEnd(rowIndex, colIndex)}
-                onTouchCancel={() => {
-                  if (touchTimer.current) {
-                    clearTimeout(touchTimer.current);
-                    touchTimer.current = null;
-                  }
-                }}
-                type="button"
-                aria-label={`Cell ${rowIndex + 1}, ${colIndex + 1}: ${getCellContent(cell) || 'Empty'}`}
-              >
-                <span className="flex items-center justify-center w-full h-full">
-                  {/* Show icons on mobile, text on desktop */}
-                  <span className="hidden sm:inline">{getCellContent(cell)}</span>
-                  <span className="sm:hidden text-2xl">{getCellIcon(cell) || '⬜'}</span>
-                </span>
-              </button>
-            ))
-          )}
+        <div className="relative">
+          {/* Column counters (top) */}
+          <div 
+            className="flex justify-center mb-1"
+            style={{ 
+              gridTemplateColumns: `repeat(${size}, 1fr)`,
+              display: 'grid',
+              gap: size === 8 ? '0.25rem' : size === 6 ? '0.5rem' : '0.75rem',
+              paddingLeft: size === 8 ? '0.75rem' : size === 6 ? '1rem' : '1.25rem',
+              paddingRight: size === 8 ? '0.75rem' : size === 6 ? '1rem' : '1.25rem'
+            }}
+          >
+            {Array.from({ length: size }, (_, colIndex) => {
+              const { xCount, oCount } = getColumnCount(colIndex);
+              return (
+                <div 
+                  key={`col-${colIndex}`}
+                  className={`text-center text-xs font-medium text-gray-600 ${
+                    size === 8 ? 'text-xs' : size === 6 ? 'text-sm' : 'text-base'
+                  }`}
+                >
+                  ({xCount}/{oCount})
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center">
+            {/* Row counters (left) */}
+            <div className="flex flex-col justify-center mr-1">
+              {board.map((_, rowIndex) => {
+                const { xCount, oCount } = getRowCount(rowIndex);
+                const cellHeight = size === 8 ? 'h-10 sm:h-12 md:h-16' : size === 6 ? 'h-12 sm:h-16 md:h-20' : 'h-16 sm:h-20 md:h-24';
+                return (
+                  <div 
+                    key={`row-${rowIndex}`}
+                    className={`flex items-center justify-center text-xs font-medium text-gray-600 ${cellHeight} ${
+                      size === 8 ? 'text-xs' : size === 6 ? 'text-sm' : 'text-base'
+                    }`}
+                    style={{ 
+                      marginBottom: rowIndex < board.length - 1 ? (size === 8 ? '0.25rem' : size === 6 ? '0.5rem' : '0.75rem') : '0'
+                    }}
+                  >
+                    ({xCount}/{oCount})
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Game Board */}
+            <div 
+              className={`
+                game-board inline-grid gap-1 sm:gap-2 p-3 sm:p-4 
+                bg-gradient-to-br from-gray-50 to-gray-100 
+                rounded-xl shadow-lg border border-gray-200
+                max-w-full overflow-hidden
+              `}
+              style={{ 
+                gridTemplateColumns: `repeat(${size}, 1fr)`,
+                maxWidth: size === 8 ? '90vw' : size === 6 ? '85vw' : '80vw'
+              }}
+            >
+              {board.map((row, rowIndex) =>
+                row.map((cell, colIndex) => (
+                  <button
+                    key={`${rowIndex}-${colIndex}`}
+                    className={`game-cell ${getCellStyles(rowIndex, colIndex, cell)}`}
+                    onClick={() => handleClick(rowIndex, colIndex)}
+                    onContextMenu={(e) => handleContextMenu(e, rowIndex, colIndex)}
+                    onTouchStart={() => handleTouchStart(rowIndex, colIndex)}
+                    onTouchEnd={() => handleTouchEnd(rowIndex, colIndex)}
+                    onTouchCancel={() => {
+                      if (touchTimer.current) {
+                        clearTimeout(touchTimer.current);
+                        touchTimer.current = null;
+                      }
+                    }}
+                    type="button"
+                    aria-label={`Cell ${rowIndex + 1}, ${colIndex + 1}: ${getCellContent(cell) || 'Empty'}`}
+                  >
+                    <span className="flex items-center justify-center w-full h-full">
+                      {/* Show icons on mobile, text on desktop */}
+                      <span className="hidden sm:inline">{getCellContent(cell)}</span>
+                      <span className="sm:hidden text-2xl">{getCellIcon(cell) || '⬜'}</span>
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+
+            {/* Row counters (right) */}
+            <div className="flex flex-col justify-center ml-1">
+              {board.map((_, rowIndex) => {
+                const { xCount, oCount } = getRowCount(rowIndex);
+                const cellHeight = size === 8 ? 'h-10 sm:h-12 md:h-16' : size === 6 ? 'h-12 sm:h-16 md:h-20' : 'h-16 sm:h-20 md:h-24';
+                return (
+                  <div 
+                    key={`row-right-${rowIndex}`}
+                    className={`flex items-center justify-center text-xs font-medium text-gray-600 ${cellHeight} ${
+                      size === 8 ? 'text-xs' : size === 6 ? 'text-sm' : 'text-base'
+                    }`}
+                    style={{ 
+                      marginBottom: rowIndex < board.length - 1 ? (size === 8 ? '0.25rem' : size === 6 ? '0.5rem' : '0.75rem') : '0'
+                    }}
+                  >
+                    ({xCount}/{oCount})
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Column counters (bottom) */}
+          <div 
+            className="flex justify-center mt-1"
+            style={{ 
+              gridTemplateColumns: `repeat(${size}, 1fr)`,
+              display: 'grid',
+              gap: size === 8 ? '0.25rem' : size === 6 ? '0.5rem' : '0.75rem',
+              paddingLeft: size === 8 ? '0.75rem' : size === 6 ? '1rem' : '1.25rem',
+              paddingRight: size === 8 ? '0.75rem' : size === 6 ? '1rem' : '1.25rem'
+            }}
+          >
+            {Array.from({ length: size }, (_, colIndex) => {
+              const { xCount, oCount } = getColumnCount(colIndex);
+              return (
+                <div 
+                  key={`col-bottom-${colIndex}`}
+                  className={`text-center text-xs font-medium text-gray-600 ${
+                    size === 8 ? 'text-xs' : size === 6 ? 'text-sm' : 'text-base'
+                  }`}
+                >
+                  ({xCount}/{oCount})
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
