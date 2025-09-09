@@ -10,6 +10,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Injectable, Logger } from '@nestjs/common';
 import { GamesService } from '../games/games.service';
+import { GameMovesService } from '../games/game-moves.service';
 import { UsersService } from '../users/users.service';
 
 interface GameRoom {
@@ -58,6 +59,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(
     private gamesService: GamesService,
+    private gameMovesService: GameMovesService,
     private usersService: UsersService,
   ) {}
 
@@ -175,6 +177,20 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (!room.players.has(userId)) {
         client.emit('error', { message: 'You are not in this game' });
         return;
+      }
+
+      // Save move to database
+      try {
+        await this.gameMovesService.saveMove({
+          gameId: room.gameId,
+          userId,
+          row,
+          col,
+          value,
+        });
+      } catch (saveError) {
+        this.logger.error('Failed to save move to database:', saveError);
+        // Continue with the game flow even if database save fails
       }
 
       // Update room game state

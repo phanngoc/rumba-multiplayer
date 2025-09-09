@@ -211,44 +211,24 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
-      {/* Mobile-First Layout */}
-      <div className="lg:hidden">
-        {/* Mobile: Controls at top, board below */}
-        <div className="p-4 space-y-6">
-          <GameControls
-            size={size}
-            difficulty={difficulty}
-            isComplete={gameState.isComplete}
-            isValid={gameState.isValid}
-            onSizeChange={handleSizeChange}
-            onDifficultyChange={handleDifficultyChange}
-            onCheck={checkBoard}
-            onHint={getHint}
-            onReset={resetBoard}
-            onSolution={showSolution}
-            onNewGame={generateNewPuzzle}
-            onInvitePlayer={handleInvitePlayer}
-            onJoinGame={handleJoinGame}
-            multiplayerEnabled={true}
-            currentGameCode={currentGame?.code}
-          />
-          
-          <GameBoard
-            board={currentBoard}
-            onCellClick={handleCellClick}
-            onCellRightClick={handleCellRightClick}
-            errors={gameState.errors}
-            hintPosition={hintPosition}
-          />
-        </div>
-      </div>
-
-      {/* Desktop Layout */}
-      <div className="hidden lg:block">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex gap-8 items-start justify-center max-w-7xl mx-auto">
-            {/* Game Controls - Left Side */}
-            <div className="w-80 sticky top-8">
+      {/* Main Content Area */}
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex gap-8 items-start justify-center max-w-7xl mx-auto">
+          {/* Game Area - Center */}
+          <div className="flex-1 flex flex-col items-center space-y-6">
+            {/* Game Board */}
+            <div className="flex justify-center">
+              <GameBoard
+                board={currentBoard}
+                onCellClick={handleCellClick}
+                onCellRightClick={handleCellRightClick}
+                errors={gameState.errors}
+                hintPosition={hintPosition}
+              />
+            </div>
+            
+            {/* Game Controls Below Board */}
+            <div className="w-full max-w-md">
               <GameControls
                 size={size}
                 difficulty={difficulty}
@@ -267,36 +247,25 @@ export default function Home() {
                 currentGameCode={currentGame?.code}
               />
             </div>
+          </div>
 
-            {/* Game Board - Center */}
-            <div className="flex-1 flex justify-center">
-              <GameBoard
-                board={currentBoard}
-                onCellClick={handleCellClick}
-                onCellRightClick={handleCellRightClick}
-                errors={gameState.errors}
-                hintPosition={hintPosition}
+          {/* Multiplayer Status - Right Side */}
+          {currentGame && (
+            <div className="w-80 sticky top-8">
+              <MultiplayerStatus
+                currentUserId={user?.userId || ''}
+                players={multiplayerPlayers}
+                gameCode={currentGame.code}
+                winner={winner}
+                isVisible={players.length > 1}
               />
             </div>
-
-            {/* Multiplayer Status - Right Side */}
-            {currentGame && (
-              <div className="w-80 sticky top-8">
-                <MultiplayerStatus
-                  currentUserId={user?.userId || ''}
-                  players={multiplayerPlayers}
-                  gameCode={currentGame.code}
-                  winner={winner}
-                  isVisible={players.length > 1}
-                />
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
       {/* PWA-like Bottom Safe Area for Mobile */}
-      <div className="lg:hidden h-4 bg-white/50"></div>
+      <div className="h-4 bg-white/50"></div>
 
       {/* Modals */}
       <InviteModal

@@ -9,6 +9,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { GamesService } from './games.service';
+import { GameMovesService } from './game-moves.service';
 import type { CreateGameDto } from './games.service';
 import { GameState } from '../entities/game.entity';
 
@@ -18,7 +19,10 @@ class UpdateGameStateDto {
 
 @Controller('games')
 export class GamesController {
-  constructor(private readonly gamesService: GamesService) {}
+  constructor(
+    private readonly gamesService: GamesService,
+    private readonly gameMovesService: GameMovesService,
+  ) {}
 
   @Post()
   async createGame(@Body() createGameDto: CreateGameDto) {
@@ -201,6 +205,76 @@ export class GamesController {
       }
       throw new HttpException(
         'Failed to retrieve game',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Get(':gameId/moves')
+  async getGameMoves(@Param('gameId') gameId: number) {
+    try {
+      const moves = await this.gameMovesService.getGameMoves(gameId);
+
+      return {
+        success: true,
+        data: moves.map(move => ({
+          id: move.id,
+          userId: move.userId,
+          nickname: move.user?.nickname || 'Unknown Player',
+          row: move.r,
+          col: move.c,
+          value: move.value,
+          createdAt: move.createdAt,
+        })),
+        message: 'Game moves retrieved successfully'
+      };
+    } catch (error) {
+      throw new HttpException(
+        'Failed to retrieve game moves',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Get(':gameId/moves/recent')
+  async getRecentMoves(@Param('gameId') gameId: number) {
+    try {
+      const moves = await this.gameMovesService.getRecentMoves(gameId, 20);
+
+      return {
+        success: true,
+        data: moves.map(move => ({
+          id: move.id,
+          userId: move.userId,
+          nickname: move.user?.nickname || 'Unknown Player',
+          row: move.r,
+          col: move.c,
+          value: move.value,
+          createdAt: move.createdAt,
+        })),
+        message: 'Recent game moves retrieved successfully'
+      };
+    } catch (error) {
+      throw new HttpException(
+        'Failed to retrieve recent game moves',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Get(':gameId/moves/count')
+  async getMoveCount(@Param('gameId') gameId: number) {
+    try {
+      const count = await this.gameMovesService.getMoveCount(gameId);
+
+      return {
+        success: true,
+        data: { count },
+        message: 'Move count retrieved successfully'
+      };
+    } catch (error) {
+      throw new HttpException(
+        'Failed to retrieve move count',
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
