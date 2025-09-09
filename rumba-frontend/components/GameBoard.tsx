@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { CellValue, GameBoard as GameBoardType } from '@/lib/game-types';
+import { CellValue, GameBoard as GameBoardType, PairConstraint, ConstraintType } from '@/lib/game-types';
 
 interface GameBoardProps {
   board: GameBoardType;
@@ -9,6 +9,7 @@ interface GameBoardProps {
   onCellRightClick: (row: number, col: number) => void;
   errors?: string[];
   hintPosition?: { row: number; col: number } | null;
+  constraints?: PairConstraint[];
 }
 
 const GameBoard: React.FC<GameBoardProps> = ({ 
@@ -16,7 +17,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
   onCellClick, 
   onCellRightClick, 
   errors = [],
-  hintPosition
+  hintPosition,
+  constraints = []
 }) => {
   const size = board.length;
   const [touchStartTime, setTouchStartTime] = useState<number>(0);
@@ -121,6 +123,77 @@ const GameBoard: React.FC<GameBoardProps> = ({
     onCellRightClick(row, col);
   };
 
+  const getConstraintIcon = (type: ConstraintType) => {
+    switch (type) {
+      case ConstraintType.EQ:
+        return '=';
+      case ConstraintType.NEQ:
+        return '⚡';
+      default:
+        return '';
+    }
+  };
+
+  const getConstraintsForPosition = (row: number, col: number) => {
+    return constraints.filter(constraint => 
+      (constraint.cell1.row === row && constraint.cell1.col === col) ||
+      (constraint.cell2.row === row && constraint.cell2.col === col)
+    );
+  };
+
+  const renderConstraintIndicators = () => {
+    return constraints.map(constraint => {
+      const { cell1, cell2, type, id } = constraint;
+      
+      // Calculate positions for constraint line/indicator
+      const cell1X = cell1.col * (100 / size) + (50 / size); // Center of cell1
+      const cell1Y = cell1.row * (100 / size) + (50 / size); // Center of cell1
+      const cell2X = cell2.col * (100 / size) + (50 / size); // Center of cell2
+      const cell2Y = cell2.row * (100 / size) + (50 / size); // Center of cell2
+      
+      // Calculate midpoint for constraint icon
+      const midX = (cell1X + cell2X) / 2;
+      const midY = (cell1Y + cell2Y) / 2;
+      
+      const icon = getConstraintIcon(type);
+      
+      return (
+        <g key={id}>
+          {/* Connection line */}
+          <line
+            x1={`${cell1X}%`}
+            y1={`${cell1Y}%`}
+            x2={`${cell2X}%`}
+            y2={`${cell2Y}%`}
+            stroke={type === ConstraintType.EQ ? '#16a34a' : '#dc2626'}
+            strokeWidth="2"
+            strokeDasharray={type === ConstraintType.NEQ ? '4 4' : '0'}
+            opacity="0.7"
+          />
+          {/* Constraint icon */}
+          <circle
+            cx={`${midX}%`}
+            cy={`${midY}%`}
+            r="12"
+            fill={type === ConstraintType.EQ ? '#16a34a' : '#dc2626'}
+            opacity="0.9"
+          />
+          <text
+            x={`${midX}%`}
+            y={`${midY}%`}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize="12"
+            fontWeight="bold"
+            fill="white"
+          >
+            {icon}
+          </text>
+        </g>
+      );
+    });
+  };
+
   const handleClick = (row: number, col: number) => {
     onCellClick(row, col);
   };
@@ -129,43 +202,56 @@ const GameBoard: React.FC<GameBoardProps> = ({
     <div className="flex flex-col items-center space-y-4 w-full max-w-full">
       {/* Game Board */}
       <div className="w-full flex justify-center px-2">
-        <div 
-          className={`
-            game-board inline-grid gap-1 sm:gap-2 p-3 sm:p-4 
-            bg-gradient-to-br from-gray-50 to-gray-100 
-            rounded-xl shadow-lg border border-gray-200
-            max-w-full overflow-hidden
-          `}
-          style={{ 
-            gridTemplateColumns: `repeat(${size}, 1fr)`,
-            maxWidth: size === 8 ? '90vw' : size === 6 ? '85vw' : '80vw'
-          }}
-        >
-          {board.map((row, rowIndex) =>
-            row.map((cell, colIndex) => (
-              <button
-                key={`${rowIndex}-${colIndex}`}
-                className={`game-cell ${getCellStyles(rowIndex, colIndex, cell)}`}
-                onClick={() => handleClick(rowIndex, colIndex)}
-                onContextMenu={(e) => handleContextMenu(e, rowIndex, colIndex)}
-                onTouchStart={() => handleTouchStart(rowIndex, colIndex)}
-                onTouchEnd={() => handleTouchEnd(rowIndex, colIndex)}
-                onTouchCancel={() => {
-                  if (touchTimer.current) {
-                    clearTimeout(touchTimer.current);
-                    touchTimer.current = null;
-                  }
-                }}
-                type="button"
-                aria-label={`Cell ${rowIndex + 1}, ${colIndex + 1}: ${getCellContent(cell) || 'Empty'}`}
-              >
-                <span className="flex items-center justify-center w-full h-full">
-                  {/* Show icons on mobile, text on desktop */}
-                  <span className="hidden sm:inline">{getCellContent(cell)}</span>
-                  <span className="sm:hidden text-2xl">{getCellIcon(cell) || '⬜'}</span>
-                </span>
-              </button>
-            ))
+        <div className="relative">
+          <div 
+            className={`
+              game-board inline-grid gap-1 sm:gap-2 p-3 sm:p-4 
+              bg-gradient-to-br from-gray-50 to-gray-100 
+              rounded-xl shadow-lg border border-gray-200
+              max-w-full overflow-hidden
+            `}
+            style={{ 
+              gridTemplateColumns: `repeat(${size}, 1fr)`,
+              maxWidth: size === 8 ? '90vw' : size === 6 ? '85vw' : '80vw'
+            }}
+          >
+            {board.map((row, rowIndex) =>
+              row.map((cell, colIndex) => (
+                <button
+                  key={`${rowIndex}-${colIndex}`}
+                  className={`game-cell ${getCellStyles(rowIndex, colIndex, cell)}`}
+                  onClick={() => handleClick(rowIndex, colIndex)}
+                  onContextMenu={(e) => handleContextMenu(e, rowIndex, colIndex)}
+                  onTouchStart={() => handleTouchStart(rowIndex, colIndex)}
+                  onTouchEnd={() => handleTouchEnd(rowIndex, colIndex)}
+                  onTouchCancel={() => {
+                    if (touchTimer.current) {
+                      clearTimeout(touchTimer.current);
+                      touchTimer.current = null;
+                    }
+                  }}
+                  type="button"
+                  aria-label={`Cell ${rowIndex + 1}, ${colIndex + 1}: ${getCellContent(cell) || 'Empty'}`}
+                >
+                  <span className="flex items-center justify-center w-full h-full">
+                    {/* Show icons on mobile, text on desktop */}
+                    <span className="hidden sm:inline">{getCellContent(cell)}</span>
+                    <span className="sm:hidden text-2xl">{getCellIcon(cell) || '⬜'}</span>
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+          
+          {/* Constraint indicators overlay */}
+          {constraints.length > 0 && (
+            <svg
+              className="absolute inset-0 w-full h-full pointer-events-none"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+            >
+              {renderConstraintIndicators()}
+            </svg>
           )}
         </div>
       </div>

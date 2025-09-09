@@ -1,4 +1,4 @@
-import { CellValue, GameBoard, Position } from './game-types';
+import { CellValue, GameBoard, Position, PairConstraint, ConstraintType } from './game-types';
 
 export class GameLogic {
   static createEmptyBoard(size: number): GameBoard {
@@ -9,7 +9,7 @@ export class GameLogic {
     return board.map(row => [...row]);
   }
 
-  static validateBoard(board: GameBoard): { isValid: boolean; errors: string[] } {
+  static validateBoard(board: GameBoard, constraints?: PairConstraint[]): { isValid: boolean; errors: string[] } {
     const size = board.length;
     const errors: string[] = [];
     let isValid = true;
@@ -49,6 +49,13 @@ export class GameLogic {
           isValid = false;
         }
       }
+    }
+
+    // Check pair constraints
+    if (constraints) {
+      const constraintErrors = this.validateConstraints(board, constraints);
+      errors.push(...constraintErrors);
+      if (constraintErrors.length > 0) isValid = false;
     }
 
     return { isValid, errors };
@@ -92,21 +99,51 @@ export class GameLogic {
     return a.length === b.length && a.every((val, i) => val === b[i]);
   }
 
+  private static validateConstraints(board: GameBoard, constraints: PairConstraint[]): string[] {
+    const errors: string[] = [];
+    
+    for (const constraint of constraints) {
+      const { cell1, cell2, type } = constraint;
+      const value1 = board[cell1.row][cell1.col];
+      const value2 = board[cell2.row][cell2.col];
+      
+      // Skip validation if either cell is empty
+      if (value1 === CellValue.EMPTY || value2 === CellValue.EMPTY) {
+        continue;
+      }
+      
+      const cellName1 = `(${cell1.row + 1},${cell1.col + 1})`;
+      const cellName2 = `(${cell2.row + 1},${cell2.col + 1})`;
+      
+      if (type === ConstraintType.EQ) {
+        if (value1 !== value2) {
+          errors.push(`Constraint violation: ${cellName1} and ${cellName2} must be equal (=)`);
+        }
+      } else if (type === ConstraintType.NEQ) {
+        if (value1 === value2) {
+          errors.push(`Constraint violation: ${cellName1} and ${cellName2} must be different (⚡)`);
+        }
+      }
+    }
+    
+    return errors;
+  }
+
   static isComplete(board: GameBoard): boolean {
     return board.every(row => row.every(cell => cell !== CellValue.EMPTY));
   }
 
-  static canPlaceValue(board: GameBoard, row: number, col: number, value: CellValue): boolean {
+  static canPlaceValue(board: GameBoard, row: number, col: number, value: CellValue, constraints?: PairConstraint[]): boolean {
     if (value === CellValue.EMPTY) return true;
 
     const newBoard = this.copyBoard(board);
     newBoard[row][col] = value;
     
-    return this.validateBoard(newBoard).isValid;
+    return this.validateBoard(newBoard, constraints).isValid;
   }
 
   // Constraint propagation - finds forced moves
-  static propagateConstraints(board: GameBoard): GameBoard {
+  static propagateConstraints(board: GameBoard, constraints?: PairConstraint[]): GameBoard {
     const newBoard = this.copyBoard(board);
     const size = board.length;
     let changed = true;
@@ -117,7 +154,7 @@ export class GameLogic {
       for (let row = 0; row < size; row++) {
         for (let col = 0; col < size; col++) {
           if (newBoard[row][col] === CellValue.EMPTY) {
-            const forcedValue = this.getForcedValue(newBoard, row, col);
+            const forcedValue = this.getForcedValue(newBoard, row, col, constraints);
             if (forcedValue !== CellValue.EMPTY) {
               newBoard[row][col] = forcedValue;
               changed = true;
@@ -130,15 +167,21 @@ export class GameLogic {
     return newBoard;
   }
 
-  private static getForcedValue(board: GameBoard, row: number, col: number): CellValue {
+  private static getForcedValue(board: GameBoard, row: number, col: number, constraints?: PairConstraint[]): CellValue {
     const size = board.length;
     
     // Check if placing X or O would violate constraints
-    const canPlaceX = this.canPlaceValue(board, row, col, CellValue.X);
-    const canPlaceO = this.canPlaceValue(board, row, col, CellValue.O);
+    const canPlaceX = this.canPlaceValue(board, row, col, CellValue.X, constraints);
+    const canPlaceO = this.canPlaceValue(board, row, col, CellValue.O, constraints);
 
     if (canPlaceX && !canPlaceO) return CellValue.X;
     if (!canPlaceX && canPlaceO) return CellValue.O;
+
+    // Check pair constraints for forced values
+    if (constraints) {
+      const constraintForced = this.checkConstraintForced(board, row, col, constraints);
+      if (constraintForced !== CellValue.EMPTY) return constraintForced;
+    }
 
     // Check patterns that force a value
     const rowLine = board[row];
@@ -164,6 +207,39 @@ export class GameLogic {
     if (colXCount === size / 2) return CellValue.O;
     if (colOCount === size / 2) return CellValue.X;
 
+    return CellValue.EMPTY;
+  }
+
+  private static checkConstraintForced(board: GameBoard, row: number, col: number, constraints: PairConstraint[]): CellValue {
+    for (const constraint of constraints) {
+      const { cell1, cell2, type } = constraint;
+      
+      // Check if this cell is part of a constraint
+      let thisCell: Position | null = null;
+      let otherCell: Position | null = null;
+      
+      if (cell1.row === row && cell1.col === col) {
+        thisCell = cell1;
+        otherCell = cell2;
+      } else if (cell2.row === row && cell2.col === col) {
+        thisCell = cell2;
+        otherCell = cell1;
+      }
+      
+      if (thisCell && otherCell) {
+        const otherValue = board[otherCell.row][otherCell.col];
+        
+        // If the other cell has a value, we can determine this cell's value
+        if (otherValue !== CellValue.EMPTY) {
+          if (type === ConstraintType.EQ) {
+            return otherValue; // Must be the same
+          } else if (type === ConstraintType.NEQ) {
+            return otherValue === CellValue.X ? CellValue.O : CellValue.X; // Must be different
+          }
+        }
+      }
+    }
+    
     return CellValue.EMPTY;
   }
 
@@ -194,10 +270,10 @@ export class GameLogic {
   }
 
   // Simple solver using DFS with constraint propagation
-  static solve(board: GameBoard): GameBoard | null {
-    const propagated = this.propagateConstraints(board);
+  static solve(board: GameBoard, constraints?: PairConstraint[]): GameBoard | null {
+    const propagated = this.propagateConstraints(board, constraints);
     
-    if (!this.validateBoard(propagated).isValid) {
+    if (!this.validateBoard(propagated, constraints).isValid) {
       return null;
     }
 
@@ -211,10 +287,10 @@ export class GameLogic {
         if (propagated[row][col] === CellValue.EMPTY) {
           // Try X first, then O
           for (const value of [CellValue.X, CellValue.O]) {
-            if (this.canPlaceValue(propagated, row, col, value)) {
+            if (this.canPlaceValue(propagated, row, col, value, constraints)) {
               const newBoard = this.copyBoard(propagated);
               newBoard[row][col] = value;
-              const solution = this.solve(newBoard);
+              const solution = this.solve(newBoard, constraints);
               if (solution) return solution;
             }
           }
@@ -227,8 +303,8 @@ export class GameLogic {
   }
 
   // Get hint - finds a cell that can be filled with constraint propagation
-  static getHint(board: GameBoard): Position | null {
-    const propagated = this.propagateConstraints(board);
+  static getHint(board: GameBoard, constraints?: PairConstraint[]): Position | null {
+    const propagated = this.propagateConstraints(board, constraints);
     
     // Find a cell that was filled by propagation
     for (let row = 0; row < board.length; row++) {
@@ -253,5 +329,57 @@ export class GameLogic {
       }
     }
     return count;
+  }
+
+  // Generate random constraints for a solved board
+  static generateConstraints(solvedBoard: GameBoard, numConstraints: number = 3): PairConstraint[] {
+    const size = solvedBoard.length;
+    const constraints: PairConstraint[] = [];
+    const usedCells = new Set<string>();
+    
+    let attempts = 0;
+    const maxAttempts = numConstraints * 10; // Prevent infinite loop
+    
+    while (constraints.length < numConstraints && attempts < maxAttempts) {
+      attempts++;
+      
+      // Pick two random cells
+      const row1 = Math.floor(Math.random() * size);
+      const col1 = Math.floor(Math.random() * size);
+      const row2 = Math.floor(Math.random() * size);
+      const col2 = Math.floor(Math.random() * size);
+      
+      // Skip if same cell or cells already used
+      if (row1 === row2 && col1 === col2) continue;
+      
+      const cell1Key = `${row1},${col1}`;
+      const cell2Key = `${row2},${col2}`;
+      
+      if (usedCells.has(cell1Key) || usedCells.has(cell2Key)) continue;
+      
+      // Don't create constraints for cells that are too far apart
+      const distance = Math.abs(row1 - row2) + Math.abs(col1 - col2);
+      if (distance > size) continue;
+      
+      const value1 = solvedBoard[row1][col1];
+      const value2 = solvedBoard[row2][col2];
+      
+      // Determine constraint type based on values
+      const type = value1 === value2 ? ConstraintType.EQ : ConstraintType.NEQ;
+      
+      // Create constraint
+      const constraint: PairConstraint = {
+        id: `constraint_${constraints.length}`,
+        type,
+        cell1: { row: row1, col: col1 },
+        cell2: { row: row2, col: col2 }
+      };
+      
+      constraints.push(constraint);
+      usedCells.add(cell1Key);
+      usedCells.add(cell2Key);
+    }
+    
+    return constraints;
   }
 }
