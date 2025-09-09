@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { CellValue, GameBoard, GameDifficulty, GameState, Position } from '@/lib/game-types';
+import { CellValue, GameBoard, GameDifficulty, GameState, Position, ImmutableBoard } from '@/lib/game-types';
 import { GameLogic } from '@/lib/game-logic';
 import { PuzzleGenerator } from '@/lib/puzzle-generator';
 
@@ -14,8 +14,12 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
   const [originalPuzzle, setOriginalPuzzle] = useState<GameBoard>(() => 
     GameLogic.createEmptyBoard(initialSize)
   );
+  const [immutableCells, setImmutableCells] = useState<ImmutableBoard>(() =>
+    Array(initialSize).fill(null).map(() => Array(initialSize).fill(false))
+  );
   const [gameState, setGameState] = useState<GameState>({
     board: GameLogic.createEmptyBoard(initialSize),
+    immutable: Array(initialSize).fill(null).map(() => Array(initialSize).fill(false)),
     size: initialSize,
     isComplete: false,
     isValid: true,
@@ -25,17 +29,18 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
   const [isLoading, setIsLoading] = useState(false);
 
   // Update game state when board changes
-  const updateGameState = useCallback((board: GameBoard) => {
+  const updateGameState = useCallback((board: GameBoard, immutable?: ImmutableBoard) => {
     const validation = GameLogic.validateBoard(board);
     const isComplete = GameLogic.isComplete(board);
     
-    setGameState({
+    setGameState(prevState => ({
       board,
+      immutable: immutable || prevState.immutable,
       size: board.length,
       isComplete,
       isValid: validation.isValid,
       errors: validation.errors
-    });
+    }));
   }, []);
 
   // Generate new puzzle
@@ -48,37 +53,52 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
       await new Promise(resolve => setTimeout(resolve, 100));
       
       let puzzle: GameBoard;
+      let immutable: ImmutableBoard;
+      
       try {
-        puzzle = PuzzleGenerator.generatePuzzle(size, difficulty);
+        const puzzleBoard = PuzzleGenerator.generatePuzzle(size, difficulty);
+        puzzle = puzzleBoard.values;
+        immutable = puzzleBoard.immutable;
       } catch (generatorError) {
         console.warn('Puzzle generator failed, creating simple puzzle:', generatorError);
         // Create a simple puzzle as fallback
         puzzle = GameLogic.createEmptyBoard(size);
+        immutable = Array(size).fill(null).map(() => Array(size).fill(false));
+        
         // Add some initial values for a playable puzzle
         for (let i = 0; i < Math.min(4, size); i++) {
           if (i < size && i + 1 < size) {
             puzzle[0][i] = (i % 2 === 0) ? CellValue.X : CellValue.O;
+            immutable[0][i] = true;
           }
         }
       }
       
       setOriginalPuzzle(puzzle);
+      setImmutableCells(immutable);
       setCurrentBoard(GameLogic.copyBoard(puzzle));
-      updateGameState(puzzle);
+      updateGameState(puzzle, immutable);
     } catch (error) {
       console.error('Failed to generate puzzle:', error);
       // Final fallback to empty board
       const emptyBoard = GameLogic.createEmptyBoard(size);
+      const emptyImmutable = Array(size).fill(null).map(() => Array(size).fill(false));
       setOriginalPuzzle(emptyBoard);
+      setImmutableCells(emptyImmutable);
       setCurrentBoard(emptyBoard);
-      updateGameState(emptyBoard);
+      updateGameState(emptyBoard, emptyImmutable);
     } finally {
       setIsLoading(false);
     }
-  }, [size, difficulty, updateGameState]);
+  }, [size, difficulty]);
 
   // Handle cell click (left click: Empty → X → O)
   const handleCellClick = useCallback((row: number, col: number) => {
+    // Check if cell is immutable (cannot be edited)
+    if (immutableCells[row][col]) {
+      return; // Do nothing for immutable cells
+    }
+    
     setCurrentBoard(prevBoard => {
       const newBoard = GameLogic.copyBoard(prevBoard);
       const currentValue = newBoard[row][col];
@@ -100,10 +120,15 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
       setHintPosition(null); // Clear hint when user makes a move
       return newBoard;
     });
-  }, [updateGameState]);
+  }, [updateGameState, immutableCells]);
 
   // Handle right click (right click: Empty → O → X)
   const handleCellRightClick = useCallback((row: number, col: number) => {
+    // Check if cell is immutable (cannot be edited)
+    if (immutableCells[row][col]) {
+      return; // Do nothing for immutable cells
+    }
+    
     setCurrentBoard(prevBoard => {
       const newBoard = GameLogic.copyBoard(prevBoard);
       const currentValue = newBoard[row][col];
@@ -125,7 +150,7 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
       setHintPosition(null); // Clear hint when user makes a move
       return newBoard;
     });
-  }, [updateGameState]);
+  }, [updateGameState, immutableCells]);
 
   // Check current board
   const checkBoard = useCallback(() => {
@@ -202,6 +227,7 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
     size,
     difficulty,
     currentBoard,
+    immutableCells,
     gameState,
     hintPosition,
     isLoading,

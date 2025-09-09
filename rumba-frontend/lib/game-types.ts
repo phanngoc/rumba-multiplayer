@@ -5,9 +5,16 @@ export enum CellValue {
 }
 
 export type GameBoard = CellValue[][];
+export type ImmutableBoard = boolean[][];
+
+export interface PuzzleBoard {
+  values: GameBoard;
+  immutable: ImmutableBoard;
+}
 
 export interface GameState {
   board: GameBoard;
+  immutable?: ImmutableBoard;
   size: number;
   isComplete: boolean;
   isValid: boolean;

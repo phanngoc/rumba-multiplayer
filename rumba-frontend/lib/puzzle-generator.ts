@@ -1,8 +1,8 @@
-import { CellValue, GameBoard, GameDifficulty } from './game-types';
+import { CellValue, GameBoard, GameDifficulty, PuzzleBoard, ImmutableBoard } from './game-types';
 import { GameLogic } from './game-logic';
 
 export class PuzzleGenerator {
-  static generatePuzzle(size: number, difficulty: GameDifficulty = GameDifficulty.MEDIUM): GameBoard {
+  static generatePuzzle(size: number, difficulty: GameDifficulty = GameDifficulty.MEDIUM): PuzzleBoard {
     // Try multiple times to generate a puzzle
     const maxAttempts = 10;
     
@@ -83,16 +83,19 @@ export class PuzzleGenerator {
   }
 
   // Fallback simple puzzle generator
-  private static generateSimplePuzzle(size: number): GameBoard {
+  private static generateSimplePuzzle(size: number): PuzzleBoard {
     const board = GameLogic.createEmptyBoard(size);
+    const immutable = this.createEmptyImmutableBoard(size);
     
     // Create a simple alternating pattern for part of the board
     for (let row = 0; row < Math.min(2, size); row++) {
       for (let col = 0; col < size; col++) {
         if ((row + col) % 2 === 0) {
           board[row][col] = CellValue.X;
+          immutable[row][col] = true;
         } else {
           board[row][col] = CellValue.O;
+          immutable[row][col] = true;
         }
       }
     }
@@ -101,13 +104,19 @@ export class PuzzleGenerator {
     if (size >= 4) {
       board[size - 1][0] = CellValue.O;
       board[size - 1][1] = CellValue.X;
+      immutable[size - 1][0] = true;
+      immutable[size - 1][1] = true;
     }
     
-    return board;
+    return {
+      values: board,
+      immutable
+    };
   }
 
-  private static createPuzzleFromSolution(solution: GameBoard, difficulty: GameDifficulty): GameBoard {
+  private static createPuzzleFromSolution(solution: GameBoard, difficulty: GameDifficulty): PuzzleBoard {
     const puzzle = GameLogic.copyBoard(solution);
+    const immutable = this.createEmptyImmutableBoard(solution.length);
     const size = solution.length;
     const totalCells = size * size;
     
@@ -146,12 +155,24 @@ export class PuzzleGenerator {
       }
     }
     
-    return puzzle;
+    // Mark remaining cells as immutable (disabled)
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        if (puzzle[row][col] !== CellValue.EMPTY) {
+          immutable[row][col] = true;
+        }
+      }
+    }
+    
+    return {
+      values: puzzle,
+      immutable
+    };
   }
 
   // Generate multiple puzzles for testing
-  static generateMultiplePuzzles(size: number, count: number, difficulty: GameDifficulty = GameDifficulty.MEDIUM): GameBoard[] {
-    const puzzles: GameBoard[] = [];
+  static generateMultiplePuzzles(size: number, count: number, difficulty: GameDifficulty = GameDifficulty.MEDIUM): PuzzleBoard[] {
+    const puzzles: PuzzleBoard[] = [];
     
     for (let i = 0; i < count; i++) {
       try {
@@ -165,5 +186,10 @@ export class PuzzleGenerator {
     }
 
     return puzzles;
+  }
+
+  // Helper method to create empty immutable board
+  private static createEmptyImmutableBoard(size: number): ImmutableBoard {
+    return Array(size).fill(null).map(() => Array(size).fill(false));
   }
 }
