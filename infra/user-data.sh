@@ -130,7 +130,7 @@ echo "Starting Rumba deployment..."
 # Clone or update the repository
 if [ ! -d "/opt/rumba/app" ]; then
     echo "Cloning repository..."
-    git clone https://github.com/your-repo/rumba.git /opt/rumba/app
+    git clone https://github.com/phanngoc/rumba-multiplayer.git /opt/rumba/app
 else
     echo "Updating repository..."
     cd /opt/rumba/app
