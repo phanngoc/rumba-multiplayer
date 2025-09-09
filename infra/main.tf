@@ -33,11 +33,24 @@ data "aws_vpc" "default" {
   default = true
 }
 
-# Default subnets in the VPC
+# Get availability zones that support t3.micro
+data "aws_availability_zones" "available" {
+  state = "available"
+  filter {
+    name   = "opt-in-status"
+    values = ["opt-in-not-required"]
+  }
+}
+
+# Default subnets in supported availability zones
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.default.id]
+  }
+  filter {
+    name   = "availability-zone"
+    values = ["us-east-1a", "us-east-1b", "us-east-1c", "us-east-1d", "us-east-1f"]
   }
 }
 
@@ -121,7 +134,7 @@ resource "aws_instance" "rumba_server" {
   ami           = data.aws_ami.amazon_linux.id
   instance_type = var.instance_type
 
-  # Use the first available subnet
+  # Use the first available subnet in a supported AZ
   subnet_id = data.aws_subnets.default.ids[0]
 
   vpc_security_group_ids = [aws_security_group.rumba_sg.id]
@@ -133,7 +146,7 @@ resource "aws_instance" "rumba_server" {
   # Root volume configuration
   root_block_device {
     volume_type = "gp3"
-    volume_size = 20
+    volume_size = 30
     encrypted   = true
   }
 

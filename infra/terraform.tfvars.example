@@ -4,11 +4,11 @@
 aws_region = "us-east-1"
 
 # EC2 Configuration
-instance_type = "t2.micro"  # Free tier eligible
+instance_type = "t3.micro"  # Free tier eligible
 
 # SSH Key Configuration
 key_name        = "rumba-key"
-public_key_path = "~/.ssh/id_rsa.pub"  # Path to your public SSH key
+public_key_path = "~/.ssh/rumba-key.pub"  # Path to your public SSH key
 
 # Environment
 environment = "production"

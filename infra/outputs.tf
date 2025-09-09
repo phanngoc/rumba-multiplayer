@@ -32,3 +32,13 @@ output "security_group_id" {
   description = "ID of the security group"
   value       = aws_security_group.rumba_sg.id
 }
+
+output "availability_zone" {
+  description = "Availability zone where the instance is deployed"
+  value       = aws_instance.rumba_server.availability_zone
+}
+
+output "instance_type" {
+  description = "Instance type used"
+  value       = aws_instance.rumba_server.instance_type
+}

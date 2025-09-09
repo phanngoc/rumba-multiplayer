@@ -14,9 +14,9 @@ The deployment consists of:
 
 ## 💰 Cost Optimization
 
-- **EC2 t2.micro**: Free tier eligible (750 hours/month for first 12 months)
+- **EC2 t3.micro**: Free tier eligible (750 hours/month for first 12 months)
 - **Elastic IP**: Free when associated with running instance
-- **EBS Storage**: 30 GB free tier (we use 20 GB)
+- **EBS Storage**: 30 GB free tier (we use 30 GB)
 - **Data Transfer**: 1 GB free per month
 - **SQLite**: No additional database costs
 
@@ -103,7 +103,7 @@ infra/
 aws_region = "us-east-1"          # Change to your preferred region
 
 # EC2 Configuration  
-instance_type = "t2.micro"        # Free tier eligible
+instance_type = "t3.micro"        # Free tier eligible
 
 # SSH Configuration
 key_name        = "rumba-key"
