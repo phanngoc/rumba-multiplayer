@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { CellValue, GameBoard as GameBoardType } from '@/lib/game-types';
+import { CellValue, GameBoard as GameBoardType, PairConstraint, ConstraintType } from '@/lib/game-types';
+import FireworksAnimation from './FireworksAnimation';
+import CompletionModal from './CompletionModal';
 
 interface GameBoardProps {
   board: GameBoardType;
@@ -9,6 +11,16 @@ interface GameBoardProps {
   onCellRightClick: (row: number, col: number) => void;
   errors?: string[];
   hintPosition?: { row: number; col: number } | null;
+  constraints?: PairConstraint[];
+  isCompleted?: boolean;
+  showFireworks?: boolean;
+  completionTime?: number | null;
+  moveCount?: number;
+  opponentMoves?: number | null;
+  isMultiplayer?: boolean;
+  difficulty?: string;
+  size?: number;
+  onCompletionModalClose?: () => void;
 }
 
 const GameBoard: React.FC<GameBoardProps> = ({ 
@@ -16,11 +28,22 @@ const GameBoard: React.FC<GameBoardProps> = ({
   onCellClick, 
   onCellRightClick, 
   errors = [],
-  hintPosition
+  hintPosition,
+  constraints = [],
+  isCompleted = false,
+  showFireworks = false,
+  completionTime = null,
+  moveCount = 0,
+  opponentMoves = null,
+  isMultiplayer = false,
+  difficulty = 'Medium',
+  size = 6,
+  onCompletionModalClose
 }) => {
-  const size = board.length;
+  const boardSize = board.length;
   const [touchStartTime, setTouchStartTime] = useState<number>(0);
   const touchTimer = useRef<NodeJS.Timeout | null>(null);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
 
   const getCellContent = (value: CellValue) => {
     switch (value) {
@@ -42,6 +65,18 @@ const GameBoard: React.FC<GameBoardProps> = ({
       default:
         return '';
     }
+  };
+
+  // Show completion modal when puzzle is completed
+  React.useEffect(() => {
+    if (isCompleted && !showCompletionModal) {
+      setShowCompletionModal(true);
+    }
+  }, [isCompleted, showCompletionModal]);
+
+  const handleCompletionModalClose = () => {
+    setShowCompletionModal(false);
+    onCompletionModalClose?.();
   };
 
   const countXO = (cells: CellValue[]) => {
@@ -67,7 +102,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
       8: 'w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16'  // Smaller for 8x8
     };
 
-    const cellSize = sizeClasses[size as keyof typeof sizeClasses] || 'w-12 h-12';
+    const cellSize = sizeClasses[boardSize as keyof typeof sizeClasses] || 'w-12 h-12';
     
     const baseStyles = `
       ${cellSize} border-2 border-gray-400 flex items-center justify-center 
@@ -82,7 +117,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
       6: 'text-xl sm:text-2xl md:text-3xl',
       8: 'text-lg sm:text-xl md:text-2xl'
     };
-    const textSize = textSizes[size as keyof typeof textSizes] || 'text-xl';
+    const textSize = textSizes[boardSize as keyof typeof textSizes] || 'text-xl';
 
     let colorStyles = '';
     switch (value) {
@@ -134,6 +169,164 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const handleContextMenu = (e: React.MouseEvent, row: number, col: number) => {
     e.preventDefault();
     onCellRightClick(row, col);
+  };
+
+  const getConstraintIcon = (type: ConstraintType) => {
+    switch (type) {
+      case ConstraintType.EQ:
+        return '=';
+      case ConstraintType.NEQ:
+        return '⚡';
+      default:
+        return '';
+    }
+  };
+
+
+  // Create a matrix for cell positions and midpoints
+  const createCellMatrix = () => {
+    // Account for padding in the game board - more accurate calculation
+    // Based on the actual padding values used in the CSS classes
+    const paddingPercentage = size === 8 ? 1.5 : size === 6 ? 2 : 2.5; // Approximate padding as percentage
+    const availableWidth = 100 - paddingPercentage;
+    const cellSize = availableWidth / boardSize;
+    
+    const matrix: { 
+      cells: { x: number; y: number }[][], 
+      midpoints: { x: number; y: number }[][]
+    } = {
+      cells: [],
+      midpoints: []
+    };
+
+    // Calculate cell centers with precise positioning including padding offset
+    for (let row = 0; row < boardSize; row++) {
+      matrix.cells[row] = [];
+      for (let col = 0; col < boardSize; col++) {
+        matrix.cells[row][col] = {
+          x: (paddingPercentage / 2) + (col * cellSize) + (cellSize / 2),
+          y: (paddingPercentage / 2) + (row * cellSize) + (cellSize / 2)
+        };
+      }
+    }
+
+    // Calculate midpoints between cells for better constraint positioning
+    for (let row = 0; row < boardSize; row++) {
+      matrix.midpoints[row] = [];
+      for (let col = 0; col < boardSize; col++) {
+        // For each cell, calculate potential midpoints with adjacent cells
+        const currentCell = matrix.cells[row][col];
+        
+        // Find the best midpoint based on available adjacent cells
+        let bestMidpoint = currentCell; // fallback to current cell
+        
+        // Check horizontal right
+        if (col < boardSize - 1) {
+          const rightCell = matrix.cells[row][col + 1];
+          bestMidpoint = {
+            x: (currentCell.x + rightCell.x) / 2,
+            y: (currentCell.y + rightCell.y) / 2
+          };
+        }
+        // Check vertical bottom
+        else if (row < boardSize - 1) {
+          const bottomCell = matrix.cells[row + 1][col];
+          bestMidpoint = {
+            x: (currentCell.x + bottomCell.x) / 2,
+            y: (currentCell.y + bottomCell.y) / 2
+          };
+        }
+        // Check diagonal bottom-right
+        else if (row < boardSize - 1 && col < boardSize - 1) {
+          const diagonalCell = matrix.cells[row + 1][col + 1];
+          bestMidpoint = {
+            x: (currentCell.x + diagonalCell.x) / 2,
+            y: (currentCell.y + diagonalCell.y) / 2
+          };
+        }
+
+        matrix.midpoints[row][col] = bestMidpoint;
+      }
+    }
+
+    return matrix;
+  };
+
+  const renderConstraintIndicators = () => {
+    if (!constraints || constraints.length === 0) {
+      return null;
+    }
+    
+    const cellMatrix = createCellMatrix();
+    
+    return constraints.map(constraint => {
+      const { cell1, cell2, type, id } = constraint;
+      
+      // Validate cell positions
+      if (cell1.row < 0 || cell1.row >= boardSize || cell1.col < 0 || cell1.col >= boardSize ||
+          cell2.row < 0 || cell2.row >= boardSize || cell2.col < 0 || cell2.col >= boardSize) {
+        console.warn(`Invalid constraint cell positions: ${JSON.stringify(constraint)}`);
+        return null;
+      }
+      
+      // Get cell positions from matrix
+      const cell1Pos = cellMatrix.cells[cell1.row][cell1.col];
+      const cell2Pos = cellMatrix.cells[cell2.row][cell2.col];
+      
+      // Calculate midpoint for constraint icon
+      const midX = (cell1Pos.x + cell2Pos.x) / 2;
+      const midY = (cell1Pos.y + cell2Pos.y) / 2;
+      
+      const icon = getConstraintIcon(type);
+      const color = type === ConstraintType.EQ ? '#16a34a' : '#dc2626'; // Darker, more visible colors
+      
+      // Smaller, more subtle constraint indicators
+      const baseRadius = boardSize === 8 ? 2.0 : boardSize === 6 ? 2.5 : 3.0;
+      const baseFontSize = boardSize === 8 ? '4' : boardSize === 6 ? '5' : '6';
+      
+      // Calculate cell size for better proportional scaling
+      const cellSize = boardSize === 8 ? 12.5 : boardSize === 6 ? 16.67 : 20; // Approximate cell size in percentage
+      const scaleFactor = Math.min(cellSize / 20, 0.8); // Smaller scale factor
+      
+      const adjustedRadius = baseRadius * scaleFactor;
+      const adjustedFontSize = (parseInt(baseFontSize) * scaleFactor).toString();
+      
+      // Add slight offset for better visual positioning
+      const iconX = midX;
+      const iconY = midY - (adjustedRadius * 0.05); // Very slight upward offset for better centering
+      
+      return (
+        <g key={id}>
+          {/* Constraint icon background - smaller and more subtle */}
+          <circle
+            cx={iconX}
+            cy={iconY}
+            r={adjustedRadius}
+            fill={color}
+            opacity="0.6"
+            stroke="white"
+            strokeWidth="0.3"
+            filter="drop-shadow(0 1px 1px rgba(0,0,0,0.2))"
+          />
+          {/* Constraint icon - smaller and more subtle */}
+          <text
+            x={iconX}
+            y={iconY}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={adjustedFontSize}
+            fontWeight="600"
+            fill="white"
+            style={{ 
+              userSelect: 'none',
+              textShadow: '0 1px 1px rgba(0,0,0,0.3)'
+            }}
+          >
+            {icon}
+          </text>
+        </g>
+      );
+    }).filter(Boolean); // Remove null entries
   };
 
   const handleClick = (row: number, col: number) => {
@@ -281,6 +474,33 @@ const GameBoard: React.FC<GameBoardProps> = ({
               );
             })}
           </div>
+          
+          {/* Constraint indicators overlay */}
+          {constraints && constraints.length > 0 && (
+            <div
+              id="constraint-indicators-overlay"
+              className="absolute inset-0 w-full h-full pointer-events-none"
+              style={{ zIndex: 10 }}
+            >
+              <svg
+                id="constraint-indicators-svg"
+                width="100%"
+                height="100%"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="xMidYMid meet"
+                className="w-full h-full"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%'
+                }}
+              >
+                {renderConstraintIndicators()}
+              </svg>
+            </div>
+          )}
         </div>
       </div>
 
@@ -309,6 +529,27 @@ const GameBoard: React.FC<GameBoardProps> = ({
           </ul>
         </div>
       )}
+
+      {/* Fireworks Animation */}
+      <FireworksAnimation 
+        isActive={showFireworks} 
+        duration={3000}
+        onComplete={() => {
+          // Fireworks will auto-hide after duration
+        }}
+      />
+
+      {/* Completion Modal */}
+      <CompletionModal
+        isOpen={showCompletionModal}
+        onClose={handleCompletionModalClose}
+        completionTime={completionTime}
+        moveCount={moveCount}
+        opponentMoves={opponentMoves}
+        isMultiplayer={isMultiplayer}
+        difficulty={difficulty}
+        size={size}
+      />
     </div>
   );
 };

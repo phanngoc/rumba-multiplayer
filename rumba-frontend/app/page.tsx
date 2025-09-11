@@ -19,6 +19,12 @@ export default function Home() {
     gameState,
     hintPosition,
     isLoading,
+    isCompleted,
+    showFireworks,
+    moveCount,
+    opponentMoves,
+    completionTime,
+    elapsedTime,
     handleCellClick: originalCellClick,
     handleCellRightClick: originalCellRightClick,
     checkBoard,
@@ -27,12 +33,14 @@ export default function Home() {
     showSolution,
     generateNewPuzzle,
     handleSizeChange,
-    handleDifficultyChange
+    handleDifficultyChange,
+    setOpponentMoves
   } = useGame();
 
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joinCode, setJoinCode] = useState('');
+
 
   const {
     user,
@@ -145,6 +153,24 @@ export default function Home() {
     }
   };
 
+  // Update opponent moves when receiving multiplayer data
+  useEffect(() => {
+    if (currentGame && players.length > 1) {
+      const otherPlayers = players.filter(p => p.userId !== user?.userId);
+      if (otherPlayers.length > 0) {
+        const opponent = otherPlayers[0];
+        if (opponent.remainingCells !== undefined) {
+          // Calculate opponent's move count based on remaining cells
+          const totalCells = size * size;
+          const opponentMoveCount = totalCells - opponent.remainingCells;
+          setOpponentMoves(opponentMoveCount);
+        }
+      }
+    } else {
+      setOpponentMoves(null);
+    }
+  }, [currentGame, players, user?.userId, size, setOpponentMoves]);
+
   // Multiplayer event handlers
   const handleInvitePlayer = async () => {
     if (currentGame) {
@@ -153,10 +179,10 @@ export default function Home() {
     } else {
       try {
         // Create a new multiplayer game
-        const puzzle = PuzzleGenerator.generatePuzzle(size, difficulty);
-        const solution = GameLogic.solve(puzzle);
+        const puzzleBoard = PuzzleGenerator.generatePuzzle(size, difficulty);
+        const solution = GameLogic.solve(puzzleBoard.values);
         if (solution) {
-          const gameInfo = await createGame(size, puzzle, solution);
+          const gameInfo = await createGame(size, puzzleBoard.values, solution);
           setShowInviteModal(true);
         }
       } catch (error) {
@@ -224,8 +250,21 @@ export default function Home() {
                 onCellRightClick={handleCellRightClick}
                 errors={gameState.errors}
                 hintPosition={hintPosition}
+                constraints={gameState.constraints}
+                isCompleted={isCompleted}
+                showFireworks={showFireworks}
+                completionTime={completionTime}
+                moveCount={moveCount}
+                opponentMoves={opponentMoves}
+                isMultiplayer={!!currentGame}
+                difficulty={difficulty}
+                size={size}
+                onCompletionModalClose={() => {
+                  // Handle completion modal close if needed
+                }}
               />
             </div>
+
             
             {/* Game Controls Below Board */}
             <div className="w-full max-w-md">

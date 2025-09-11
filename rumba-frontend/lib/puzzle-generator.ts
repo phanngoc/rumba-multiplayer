@@ -1,4 +1,4 @@
-import { CellValue, GameBoard, GameDifficulty, PuzzleBoard, ImmutableBoard } from './game-types';
+import { CellValue, GameBoard, GameDifficulty, PuzzleBoard, ImmutableBoard, PairConstraint, ConstraintType } from './game-types';
 import { GameLogic } from './game-logic';
 
 export class PuzzleGenerator {
@@ -108,9 +108,13 @@ export class PuzzleGenerator {
       immutable[size - 1][1] = true;
     }
     
+    // Generate pair constraints for the simple puzzle
+    const constraints = this.generatePairConstraints(board, size, GameDifficulty.MEDIUM);
+    
     return {
       values: board,
-      immutable
+      immutable,
+      constraints
     };
   }
 
@@ -164,10 +168,234 @@ export class PuzzleGenerator {
       }
     }
     
+    // Generate pair constraints for adjacent cells
+    const constraints = this.generatePairConstraints(solution, size, difficulty);
+    
     return {
       values: puzzle,
-      immutable
+      immutable,
+      constraints
     };
+  }
+
+  private static generatePairConstraints(solution: GameBoard, size: number, difficulty: GameDifficulty = GameDifficulty.MEDIUM): PairConstraint[] {
+    const constraints: PairConstraint[] = [];
+    let constraintId = 0;
+    
+    // Đếm số cell cố định trong solution
+    const fixedCells = this.countFixedCells(solution);
+    const totalCells = size * size;
+    const fixedRatio = fixedCells / totalCells;
+    
+    // Tính toán số lượng constraints dựa trên size board và số cell cố định
+    const totalAdjacentPairs = (size - 1) * size * 2; // (size-1)*size horizontal + (size-1)*size vertical
+    
+    // Điều chỉnh constraint rate dựa trên số cell cố định
+    // Nhiều cell cố định = ít constraints cần thiết
+    const baseConstraintRates = {
+      [GameDifficulty.EASY]: 0.25,   // 25% of adjacent pairs
+      [GameDifficulty.MEDIUM]: 0.4,  // 40% of adjacent pairs  
+      [GameDifficulty.HARD]: 0.6     // 60% of adjacent pairs
+    };
+    
+    // Giảm constraint rate nếu có nhiều cell cố định
+    const adjustedRate = baseConstraintRates[difficulty] * (1 - fixedRatio * 0.3);
+    const targetConstraints = Math.floor(totalAdjacentPairs * adjustedRate);
+    
+    // Đảm bảo có ít nhất một số constraints tối thiểu
+    const minConstraints = Math.max(3, Math.floor(size * 0.5));
+    const finalTargetConstraints = Math.max(minConstraints, targetConstraints);
+    
+    // Tạo danh sách tất cả các cặp cell kề nhau có thể tạo constraint
+    const possibleConstraints: Array<{
+      cell1: {row: number, col: number},
+      cell2: {row: number, col: number},
+      type: ConstraintType,
+      priority: number
+    }> = [];
+    
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const currentValue = solution[row][col];
+        
+        // Kiểm tra cell bên phải (horizontal)
+        if (col < size - 1) {
+          const rightValue = solution[row][col + 1];
+          const constraintType = this.determineConstraintType(currentValue, rightValue);
+          
+          if (constraintType) {
+            const priority = this.calculateConstraintPriority(row, col, size, constraintType);
+            possibleConstraints.push({
+              cell1: { row, col },
+              cell2: { row, col: col + 1 },
+              type: constraintType,
+              priority
+            });
+          }
+        }
+        
+        // Kiểm tra cell bên dưới (vertical)
+        if (row < size - 1) {
+          const bottomValue = solution[row + 1][col];
+          const constraintType = this.determineConstraintType(currentValue, bottomValue);
+          
+          if (constraintType) {
+            const priority = this.calculateConstraintPriority(row, col, size, constraintType);
+            possibleConstraints.push({
+              cell1: { row, col },
+              cell2: { row: row + 1, col },
+              type: constraintType,
+              priority
+            });
+          }
+        }
+      }
+    }
+    
+    // Sắp xếp theo priority (cao hơn = quan trọng hơn)
+    possibleConstraints.sort((a, b) => b.priority - a.priority);
+    
+    // Chọn constraints tốt nhất, đảm bảo cân bằng giữa EQ và NEQ
+    const selectedConstraints = this.selectBalancedConstraints(possibleConstraints, finalTargetConstraints);
+    
+    // Tạo constraints cuối cùng
+    for (const constraint of selectedConstraints) {
+      constraints.push({
+        id: `constraint_${constraintId++}`,
+        type: constraint.type,
+        cell1: constraint.cell1,
+        cell2: constraint.cell2
+      });
+    }
+    
+    // Debug: Log constraint statistics
+    if (process.env.NODE_ENV === 'development') {
+      const eqCount = constraints.filter(c => c.type === ConstraintType.EQ).length;
+      const neqCount = constraints.filter(c => c.type === ConstraintType.NEQ).length;
+      console.log(`Generated ${constraints.length} constraints (EQ: ${eqCount}, NEQ: ${neqCount}) for ${size}x${size} board with ${fixedCells} fixed cells`);
+    }
+    
+    return constraints;
+  }
+
+  private static determineConstraintType(value1: CellValue, value2: CellValue): ConstraintType | null {
+    // Chỉ tạo constraint nếu cả hai cell đều không rỗng
+    if (value1 === CellValue.EMPTY || value2 === CellValue.EMPTY) {
+      return null;
+    }
+    
+    // Tạo constraint dựa trên giá trị của cell
+    if (value1 === value2) {
+      return ConstraintType.EQ; // Hai cell giống nhau
+    } else {
+      return ConstraintType.NEQ; // Hai cell khác nhau
+    }
+  }
+
+  private static calculateConstraintPriority(row: number, col: number, size: number, type: ConstraintType): number {
+    let priority = 0;
+    
+    // Ưu tiên constraints ở vị trí trung tâm (quan trọng hơn)
+    const centerDistance = Math.abs(row - (size - 1) / 2) + Math.abs(col - (size - 1) / 2);
+    const maxDistance = size - 1;
+    const centerPriority = (maxDistance - centerDistance) / maxDistance * 50;
+    priority += centerPriority;
+    
+    // Ưu tiên constraints ở góc và cạnh (tạo điểm neo)
+    if (row === 0 || row === size - 1 || col === 0 || col === size - 1) {
+      priority += 30;
+    }
+    
+    // Ưu tiên NEQ constraints hơn EQ (thường khó hơn)
+    if (type === ConstraintType.NEQ) {
+      priority += 20;
+    } else {
+      priority += 10;
+    }
+    
+    // Thêm randomness để tạo sự đa dạng
+    priority += Math.random() * 20;
+    
+    return priority;
+  }
+
+  private static selectBalancedConstraints(
+    possibleConstraints: Array<{
+      cell1: {row: number, col: number},
+      cell2: {row: number, col: number},
+      type: ConstraintType,
+      priority: number
+    }>,
+    targetCount: number
+  ): Array<{
+    cell1: {row: number, col: number},
+    cell2: {row: number, col: number},
+    type: ConstraintType,
+    priority: number
+  }> {
+    const selected: typeof possibleConstraints = [];
+    const usedCells = new Set<string>();
+    
+    // Tách EQ và NEQ constraints
+    const eqConstraints = possibleConstraints.filter(c => c.type === ConstraintType.EQ);
+    const neqConstraints = possibleConstraints.filter(c => c.type === ConstraintType.NEQ);
+    
+    // Cân bằng tỷ lệ EQ:NEQ khoảng 40:60 (NEQ khó hơn nên nhiều hơn)
+    const eqTarget = Math.floor(targetCount * 0.4);
+    const neqTarget = targetCount - eqTarget;
+    
+    // Chọn EQ constraints
+    let eqSelected = 0;
+    for (const constraint of eqConstraints) {
+      if (eqSelected >= eqTarget) break;
+      
+      const cell1Key = `${constraint.cell1.row},${constraint.cell1.col}`;
+      const cell2Key = `${constraint.cell2.row},${constraint.cell2.col}`;
+      
+      // Tránh chọn constraints có cell đã được sử dụng
+      if (!usedCells.has(cell1Key) && !usedCells.has(cell2Key)) {
+        selected.push(constraint);
+        usedCells.add(cell1Key);
+        usedCells.add(cell2Key);
+        eqSelected++;
+      }
+    }
+    
+    // Chọn NEQ constraints
+    let neqSelected = 0;
+    for (const constraint of neqConstraints) {
+      if (neqSelected >= neqTarget) break;
+      
+      const cell1Key = `${constraint.cell1.row},${constraint.cell1.col}`;
+      const cell2Key = `${constraint.cell2.row},${constraint.cell2.col}`;
+      
+      // Tránh chọn constraints có cell đã được sử dụng
+      if (!usedCells.has(cell1Key) && !usedCells.has(cell2Key)) {
+        selected.push(constraint);
+        usedCells.add(cell1Key);
+        usedCells.add(cell2Key);
+        neqSelected++;
+      }
+    }
+    
+    // Nếu chưa đủ constraints, chọn thêm từ những cái còn lại
+    if (selected.length < targetCount) {
+      const remaining = possibleConstraints.filter(c => 
+        !selected.includes(c) && 
+        !usedCells.has(`${c.cell1.row},${c.cell1.col}`) &&
+        !usedCells.has(`${c.cell2.row},${c.cell2.col}`)
+      );
+      
+      for (const constraint of remaining) {
+        if (selected.length >= targetCount) break;
+        
+        selected.push(constraint);
+        usedCells.add(`${constraint.cell1.row},${constraint.cell1.col}`);
+        usedCells.add(`${constraint.cell2.row},${constraint.cell2.col}`);
+      }
+    }
+    
+    return selected;
   }
 
   // Generate multiple puzzles for testing
@@ -191,5 +419,18 @@ export class PuzzleGenerator {
   // Helper method to create empty immutable board
   private static createEmptyImmutableBoard(size: number): ImmutableBoard {
     return Array(size).fill(null).map(() => Array(size).fill(false));
+  }
+
+  // Helper method to count fixed cells in a board
+  private static countFixedCells(board: GameBoard): number {
+    let count = 0;
+    for (let row = 0; row < board.length; row++) {
+      for (let col = 0; col < board[row].length; col++) {
+        if (board[row][col] !== CellValue.EMPTY) {
+          count++;
+        }
+      }
+    }
+    return count;
   }
 }
