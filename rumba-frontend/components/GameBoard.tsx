@@ -280,13 +280,13 @@ const GameBoard: React.FC<GameBoardProps> = ({
       const icon = getConstraintIcon(type);
       const color = type === ConstraintType.EQ ? '#16a34a' : '#dc2626'; // Darker, more visible colors
       
-      // Improved scaling based on board size and cell size
-      const baseRadius = boardSize === 8 ? 3.5 : boardSize === 6 ? 4.5 : 5.5;
-      const baseFontSize = boardSize === 8 ? '6' : boardSize === 6 ? '7' : '8';
+      // Smaller, more subtle constraint indicators
+      const baseRadius = boardSize === 8 ? 2.0 : boardSize === 6 ? 2.5 : 3.0;
+      const baseFontSize = boardSize === 8 ? '4' : boardSize === 6 ? '5' : '6';
       
       // Calculate cell size for better proportional scaling
       const cellSize = boardSize === 8 ? 12.5 : boardSize === 6 ? 16.67 : 20; // Approximate cell size in percentage
-      const scaleFactor = Math.min(cellSize / 20, 1.2); // Scale based on cell size
+      const scaleFactor = Math.min(cellSize / 20, 0.8); // Smaller scale factor
       
       const adjustedRadius = baseRadius * scaleFactor;
       const adjustedFontSize = (parseInt(baseFontSize) * scaleFactor).toString();
@@ -297,29 +297,29 @@ const GameBoard: React.FC<GameBoardProps> = ({
       
       return (
         <g key={id}>
-          {/* Constraint icon background with better visibility */}
+          {/* Constraint icon background - smaller and more subtle */}
           <circle
             cx={iconX}
             cy={iconY}
             r={adjustedRadius}
             fill={color}
-            opacity="0.85"
+            opacity="0.6"
             stroke="white"
-            strokeWidth="0.5"
-            filter="drop-shadow(0 1px 2px rgba(0,0,0,0.3))"
+            strokeWidth="0.3"
+            filter="drop-shadow(0 1px 1px rgba(0,0,0,0.2))"
           />
-          {/* Constraint icon with better contrast */}
+          {/* Constraint icon - smaller and more subtle */}
           <text
             x={iconX}
             y={iconY}
             textAnchor="middle"
             dominantBaseline="central"
             fontSize={adjustedFontSize}
-            fontWeight="900"
+            fontWeight="600"
             fill="white"
             style={{ 
               userSelect: 'none',
-              textShadow: '0 1px 2px rgba(0,0,0,0.5)'
+              textShadow: '0 1px 1px rgba(0,0,0,0.3)'
             }}
           >
             {icon}
