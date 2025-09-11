@@ -27,73 +27,46 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
   });
   const [hintPosition, setHintPosition] = useState<Position | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [completionTime, setCompletionTime] = useState<number | null>(null);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [showFireworks, setShowFireworks] = useState(false);
+  const [moveCount, setMoveCount] = useState(0);
+  const [opponentMoves, setOpponentMoves] = useState<number | null>(null);
 
   // Update game state when board changes
-  const updateGameState = useCallback((board: GameBoard, immutable?: ImmutableBoard, constraints?: PairConstraint[]) => {
-    const validation = GameLogic.validateBoard(board);
-    const isComplete = GameLogic.isComplete(board);
-    
-    setGameState(prevState => ({
-      board,
-      immutable: immutable || prevState.immutable,
-      constraints: constraints || prevState.constraints,
-      size: board.length,
-      isComplete,
-      isValid: validation.isValid,
-      errors: validation.errors
-    }));
-  }, []);
-
-  // Generate new puzzle
-  const generateNewPuzzle = useCallback(async () => {
-    setIsLoading(true);
-    setHintPosition(null);
-    
-    try {
-      // Use setTimeout to prevent blocking the UI
-      await new Promise(resolve => setTimeout(resolve, 100));
+  const updateGameState = useCallback((board: GameBoard, immutable?: ImmutableBoard, newConstraints?: PairConstraint[]) => {
+    setGameState(prevState => {
+      const currentConstraints = newConstraints || prevState.constraints || [];
+      const validation = GameLogic.validateBoard(board, currentConstraints);
+      const isComplete = GameLogic.isComplete(board);
       
-      let puzzle: GameBoard;
-      let immutable: ImmutableBoard;
-      let constraints: PairConstraint[] = [];
-      
-      try {
-        const puzzleBoard = PuzzleGenerator.generatePuzzle(size, difficulty);
-        puzzle = puzzleBoard.values;
-        immutable = puzzleBoard.immutable;
-        constraints = puzzleBoard.constraints || [];
-      } catch (generatorError) {
-        console.warn('Puzzle generator failed, creating simple puzzle:', generatorError);
-        // Create a simple puzzle as fallback
-        puzzle = GameLogic.createEmptyBoard(size);
-        immutable = Array(size).fill(null).map(() => Array(size).fill(false));
+      // Check if puzzle is completed for the first time
+      if (isComplete && !prevState.isComplete && !isCompleted) {
+        const currentTime = Date.now();
+        setCompletionTime(currentTime);
+        setIsCompleted(true);
+        setShowFireworks(true);
         
-        // Add some initial values for a playable puzzle
-        for (let i = 0; i < Math.min(4, size); i++) {
-          if (i < size && i + 1 < size) {
-            puzzle[0][i] = (i % 2 === 0) ? CellValue.X : CellValue.O;
-            immutable[0][i] = true;
-          }
-        }
+        // Auto-hide fireworks after 3 seconds
+        setTimeout(() => {
+          setShowFireworks(false);
+        }, 3000);
       }
       
-      setOriginalPuzzle(puzzle);
-      setImmutableCells(immutable);
-      setCurrentBoard(GameLogic.copyBoard(puzzle));
-      updateGameState(puzzle, immutable, constraints);
-    } catch (error) {
-      console.error('Failed to generate puzzle:', error);
-      // Final fallback to empty board
-      const emptyBoard = GameLogic.createEmptyBoard(size);
-      const emptyImmutable = Array(size).fill(null).map(() => Array(size).fill(false));
-      setOriginalPuzzle(emptyBoard);
-      setImmutableCells(emptyImmutable);
-      setCurrentBoard(emptyBoard);
-      updateGameState(emptyBoard, emptyImmutable, []);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [size, difficulty, updateGameState]);
+      return {
+        board,
+        immutable: immutable || prevState.immutable,
+        constraints: currentConstraints,
+        size: board.length,
+        isComplete,
+        isValid: validation.isValid,
+        errors: validation.errors
+      };
+    });
+    
+  }, [isCompleted]);
+
 
   // Handle cell click (left click: Empty → X → O)
   const handleCellClick = useCallback((row: number, col: number) => {
@@ -102,28 +75,39 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
       return; // Do nothing for immutable cells
     }
     
+    // Start timer if not started
+    if (startTime === null) {
+      setStartTime(Date.now());
+    }
+    
     setCurrentBoard(prevBoard => {
       const newBoard = GameLogic.copyBoard(prevBoard);
       const currentValue = newBoard[row][col];
       
       // Cycle through values: Empty → X → O → Empty
+      let newValue = currentValue;
       switch (currentValue) {
         case CellValue.EMPTY:
-          newBoard[row][col] = CellValue.X;
+          newValue = CellValue.X;
           break;
         case CellValue.X:
-          newBoard[row][col] = CellValue.O;
+          newValue = CellValue.O;
           break;
         case CellValue.O:
-          newBoard[row][col] = CellValue.EMPTY;
+          newValue = CellValue.EMPTY;
           break;
       }
       
+      newBoard[row][col] = newValue;
       updateGameState(newBoard);
       setHintPosition(null); // Clear hint when user makes a move
+      
+      // Increment move count
+      setMoveCount(prev => prev + 1);
+      
       return newBoard;
     });
-  }, [updateGameState, immutableCells]);
+  }, [updateGameState, immutableCells, startTime]);
 
   // Handle right click (right click: Empty → O → X)
   const handleCellRightClick = useCallback((row: number, col: number) => {
@@ -132,28 +116,39 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
       return; // Do nothing for immutable cells
     }
     
+    // Start timer if not started
+    if (startTime === null) {
+      setStartTime(Date.now());
+    }
+    
     setCurrentBoard(prevBoard => {
       const newBoard = GameLogic.copyBoard(prevBoard);
       const currentValue = newBoard[row][col];
       
       // Cycle through values: Empty → O → X → Empty
+      let newValue = currentValue;
       switch (currentValue) {
         case CellValue.EMPTY:
-          newBoard[row][col] = CellValue.O;
+          newValue = CellValue.O;
           break;
         case CellValue.O:
-          newBoard[row][col] = CellValue.X;
+          newValue = CellValue.X;
           break;
         case CellValue.X:
-          newBoard[row][col] = CellValue.EMPTY;
+          newValue = CellValue.EMPTY;
           break;
       }
       
+      newBoard[row][col] = newValue;
       updateGameState(newBoard);
       setHintPosition(null); // Clear hint when user makes a move
+      
+      // Increment move count
+      setMoveCount(prev => prev + 1);
+      
       return newBoard;
     });
-  }, [updateGameState, immutableCells]);
+  }, [updateGameState, immutableCells, startTime]);
 
   // Check current board
   const checkBoard = useCallback(() => {
@@ -162,23 +157,27 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
 
   // Get hint
   const getHint = useCallback(() => {
-    const hint = GameLogic.getHint(currentBoard);
-    setHintPosition(hint);
-    
-    if (!hint) {
-      // If no obvious hint, try to find any valid move
-      for (let row = 0; row < size; row++) {
-        for (let col = 0; col < size; col++) {
-          if (currentBoard[row][col] === CellValue.EMPTY) {
-            if (GameLogic.canPlaceValue(currentBoard, row, col, CellValue.X) ||
-                GameLogic.canPlaceValue(currentBoard, row, col, CellValue.O)) {
-              setHintPosition({ row, col });
-              return;
+    setGameState(prevState => {
+      const currentConstraints = prevState.constraints || [];
+      const hint = GameLogic.getHint(currentBoard, currentConstraints);
+      setHintPosition(hint);
+      
+      if (!hint) {
+        // If no obvious hint, try to find any valid move
+        for (let row = 0; row < size; row++) {
+          for (let col = 0; col < size; col++) {
+            if (currentBoard[row][col] === CellValue.EMPTY) {
+              if (GameLogic.canPlaceValue(currentBoard, row, col, CellValue.X, currentConstraints) ||
+                  GameLogic.canPlaceValue(currentBoard, row, col, CellValue.O, currentConstraints)) {
+                setHintPosition({ row, col });
+                return prevState;
+              }
             }
           }
         }
       }
-    }
+      return prevState;
+    });
   }, [currentBoard, size]);
 
   // Reset to original puzzle
@@ -186,6 +185,11 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
     setCurrentBoard(GameLogic.copyBoard(originalPuzzle));
     updateGameState(originalPuzzle);
     setHintPosition(null);
+    setStartTime(null);
+    setCompletionTime(null);
+    setIsCompleted(false);
+    setShowFireworks(false);
+    setMoveCount(0);
   }, [originalPuzzle, updateGameState]);
 
   // Show solution
@@ -195,13 +199,17 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
       // Use setTimeout to prevent blocking the UI
       await new Promise(resolve => setTimeout(resolve, 10));
       
-      const solution = GameLogic.solve(originalPuzzle);
-      if (solution) {
-        setCurrentBoard(solution);
-        updateGameState(solution);
-      } else {
-        console.error('No solution found for current puzzle');
-      }
+      setGameState(prevState => {
+        const currentConstraints = prevState.constraints || [];
+        const solution = GameLogic.solve(originalPuzzle, currentConstraints);
+        if (solution) {
+          setCurrentBoard(solution);
+          updateGameState(solution);
+        } else {
+          console.error('No solution found for current puzzle');
+        }
+        return prevState;
+      });
     } finally {
       setIsLoading(false);
     }
@@ -220,10 +228,115 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
     setHintPosition(null);
   }, []);
 
+  // Generate new puzzle manually
+  const generateNewPuzzle = useCallback(() => {
+    // Trigger useEffect by changing size temporarily
+    setSize(prevSize => prevSize);
+  }, []);
+
   // Generate new puzzle when size or difficulty changes
   useEffect(() => {
-    generateNewPuzzle();
-  }, [generateNewPuzzle]);
+    const generatePuzzle = async () => {
+      setIsLoading(true);
+      setHintPosition(null);
+      
+      // Reset completion state
+      setStartTime(null);
+      setCompletionTime(null);
+      setIsCompleted(false);
+      setShowFireworks(false);
+      setMoveCount(0);
+      
+      try {
+        // Use setTimeout to prevent blocking the UI
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        let puzzle: GameBoard;
+        let immutable: ImmutableBoard;
+        let newConstraints: PairConstraint[] = [];
+        
+        try {
+          const puzzleBoard = PuzzleGenerator.generatePuzzle(size, difficulty);
+          puzzle = puzzleBoard.values;
+          immutable = puzzleBoard.immutable;
+          newConstraints = puzzleBoard.constraints || [];
+        } catch (generatorError) {
+          console.warn('Puzzle generator failed, creating simple puzzle:', generatorError);
+          // Create a simple puzzle as fallback
+          puzzle = GameLogic.createEmptyBoard(size);
+          immutable = Array(size).fill(null).map(() => Array(size).fill(false));
+          
+          // Add some initial values for a playable puzzle
+          for (let i = 0; i < Math.min(4, size); i++) {
+            if (i < size && i + 1 < size) {
+              puzzle[0][i] = (i % 2 === 0) ? CellValue.X : CellValue.O;
+              immutable[0][i] = true;
+            }
+          }
+        }
+        
+        setOriginalPuzzle(puzzle);
+        setImmutableCells(immutable);
+        setCurrentBoard(GameLogic.copyBoard(puzzle));
+        
+        // Update game state with new constraints
+        const validation = GameLogic.validateBoard(puzzle, newConstraints);
+        const isComplete = GameLogic.isComplete(puzzle);
+        
+        setGameState({
+          board: puzzle,
+          immutable,
+          constraints: newConstraints,
+          size: puzzle.length,
+          isComplete,
+          isValid: validation.isValid,
+          errors: validation.errors
+        });
+      } catch (error) {
+        console.error('Failed to generate puzzle:', error);
+        // Final fallback to empty board
+        const emptyBoard = GameLogic.createEmptyBoard(size);
+        const emptyImmutable = Array(size).fill(null).map(() => Array(size).fill(false));
+        setOriginalPuzzle(emptyBoard);
+        setImmutableCells(emptyImmutable);
+        setCurrentBoard(emptyBoard);
+        
+        // Update game state with empty board
+        const validation = GameLogic.validateBoard(emptyBoard, []);
+        const isComplete = GameLogic.isComplete(emptyBoard);
+        
+        setGameState({
+          board: emptyBoard,
+          immutable: emptyImmutable,
+          constraints: [],
+          size: emptyBoard.length,
+          isComplete,
+          isValid: validation.isValid,
+          errors: validation.errors
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    generatePuzzle();
+  }, [size, difficulty]);
+
+  // Calculate completion time
+  const getCompletionTime = useCallback(() => {
+    if (startTime && completionTime) {
+      return Math.round((completionTime - startTime) / 1000);
+    }
+    return null;
+  }, [startTime, completionTime]);
+
+  // Get current elapsed time
+  const getElapsedTime = useCallback(() => {
+    if (startTime && !completionTime) {
+      return Math.round((Date.now() - startTime) / 1000);
+    }
+    return getCompletionTime();
+  }, [startTime, completionTime, getCompletionTime]);
 
   return {
     // State
@@ -234,6 +347,12 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
     gameState,
     hintPosition,
     isLoading,
+    isCompleted,
+    showFireworks,
+    moveCount,
+    opponentMoves,
+    completionTime: getCompletionTime(),
+    elapsedTime: getElapsedTime(),
     
     // Actions
     handleCellClick,
@@ -244,6 +363,7 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
     showSolution,
     generateNewPuzzle,
     handleSizeChange,
-    handleDifficultyChange
+    handleDifficultyChange,
+    setOpponentMoves
   };
 };

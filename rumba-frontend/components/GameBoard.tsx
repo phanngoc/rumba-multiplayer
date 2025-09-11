@@ -2,6 +2,8 @@
 
 import React, { useState, useRef } from 'react';
 import { CellValue, GameBoard as GameBoardType, PairConstraint, ConstraintType } from '@/lib/game-types';
+import FireworksAnimation from './FireworksAnimation';
+import CompletionModal from './CompletionModal';
 
 interface GameBoardProps {
   board: GameBoardType;
@@ -10,6 +12,15 @@ interface GameBoardProps {
   errors?: string[];
   hintPosition?: { row: number; col: number } | null;
   constraints?: PairConstraint[];
+  isCompleted?: boolean;
+  showFireworks?: boolean;
+  completionTime?: number | null;
+  moveCount?: number;
+  opponentMoves?: number | null;
+  isMultiplayer?: boolean;
+  difficulty?: string;
+  size?: number;
+  onCompletionModalClose?: () => void;
 }
 
 const GameBoard: React.FC<GameBoardProps> = ({ 
@@ -18,11 +29,21 @@ const GameBoard: React.FC<GameBoardProps> = ({
   onCellRightClick, 
   errors = [],
   hintPosition,
-  constraints = []
+  constraints = [],
+  isCompleted = false,
+  showFireworks = false,
+  completionTime = null,
+  moveCount = 0,
+  opponentMoves = null,
+  isMultiplayer = false,
+  difficulty = 'Medium',
+  size = 6,
+  onCompletionModalClose
 }) => {
-  const size = board.length;
+  const boardSize = board.length;
   const [touchStartTime, setTouchStartTime] = useState<number>(0);
   const touchTimer = useRef<NodeJS.Timeout | null>(null);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
 
   const getCellContent = (value: CellValue) => {
     switch (value) {
@@ -46,6 +67,18 @@ const GameBoard: React.FC<GameBoardProps> = ({
     }
   };
 
+  // Show completion modal when puzzle is completed
+  React.useEffect(() => {
+    if (isCompleted && !showCompletionModal) {
+      setShowCompletionModal(true);
+    }
+  }, [isCompleted, showCompletionModal]);
+
+  const handleCompletionModalClose = () => {
+    setShowCompletionModal(false);
+    onCompletionModalClose?.();
+  };
+
   const getCellStyles = (row: number, col: number, value: CellValue) => {
     // Responsive cell size based on screen size and board size
     const sizeClasses = {
@@ -54,7 +87,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
       8: 'w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16'  // Smaller for 8x8
     };
 
-    const cellSize = sizeClasses[size as keyof typeof sizeClasses] || 'w-12 h-12';
+    const cellSize = sizeClasses[boardSize as keyof typeof sizeClasses] || 'w-12 h-12';
     
     const baseStyles = `
       ${cellSize} border-2 border-gray-400 flex items-center justify-center 
@@ -69,7 +102,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
       6: 'text-xl sm:text-2xl md:text-3xl',
       8: 'text-lg sm:text-xl md:text-2xl'
     };
-    const textSize = textSizes[size as keyof typeof textSizes] || 'text-xl';
+    const textSize = textSizes[boardSize as keyof typeof textSizes] || 'text-xl';
 
     let colorStyles = '';
     switch (value) {
@@ -137,7 +170,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
 
   // Create a matrix for cell positions and midpoints
   const createCellMatrix = () => {
-    const cellSize = 100 / size;
+    const cellSize = 100 / boardSize;
     const matrix: { 
       cells: { x: number; y: number }[][], 
       midpoints: { x: number; y: number }[][]
@@ -147,9 +180,9 @@ const GameBoard: React.FC<GameBoardProps> = ({
     };
 
     // Calculate cell centers with precise positioning
-    for (let row = 0; row < size; row++) {
+    for (let row = 0; row < boardSize; row++) {
       matrix.cells[row] = [];
-      for (let col = 0; col < size; col++) {
+      for (let col = 0; col < boardSize; col++) {
         matrix.cells[row][col] = {
           x: (col * cellSize) + (cellSize / 2),
           y: (row * cellSize) + (cellSize / 2)
@@ -158,9 +191,9 @@ const GameBoard: React.FC<GameBoardProps> = ({
     }
 
     // Calculate midpoints between cells for better constraint positioning
-    for (let row = 0; row < size; row++) {
+    for (let row = 0; row < boardSize; row++) {
       matrix.midpoints[row] = [];
-      for (let col = 0; col < size; col++) {
+      for (let col = 0; col < boardSize; col++) {
         // For each cell, calculate potential midpoints with adjacent cells
         const currentCell = matrix.cells[row][col];
         
@@ -168,7 +201,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
         let bestMidpoint = currentCell; // fallback to current cell
         
         // Check horizontal right
-        if (col < size - 1) {
+        if (col < boardSize - 1) {
           const rightCell = matrix.cells[row][col + 1];
           bestMidpoint = {
             x: (currentCell.x + rightCell.x) / 2,
@@ -176,7 +209,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
           };
         }
         // Check vertical bottom
-        else if (row < size - 1) {
+        else if (row < boardSize - 1) {
           const bottomCell = matrix.cells[row + 1][col];
           bestMidpoint = {
             x: (currentCell.x + bottomCell.x) / 2,
@@ -184,7 +217,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
           };
         }
         // Check diagonal bottom-right
-        else if (row < size - 1 && col < size - 1) {
+        else if (row < boardSize - 1 && col < boardSize - 1) {
           const diagonalCell = matrix.cells[row + 1][col + 1];
           bestMidpoint = {
             x: (currentCell.x + diagonalCell.x) / 2,
@@ -210,8 +243,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
       const { cell1, cell2, type, id } = constraint;
       
       // Validate cell positions
-      if (cell1.row < 0 || cell1.row >= size || cell1.col < 0 || cell1.col >= size ||
-          cell2.row < 0 || cell2.row >= size || cell2.col < 0 || cell2.col >= size) {
+      if (cell1.row < 0 || cell1.row >= boardSize || cell1.col < 0 || cell1.col >= boardSize ||
+          cell2.row < 0 || cell2.row >= boardSize || cell2.col < 0 || cell2.col >= boardSize) {
         console.warn(`Invalid constraint cell positions: ${JSON.stringify(constraint)}`);
         return null;
       }
@@ -233,8 +266,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
       const isAdjacent = (rowDiff <= 1 && colDiff <= 1) && (rowDiff + colDiff > 0);
       
       // Scale radius based on board size - much smaller
-      const radius = size === 8 ? 2.5 : size === 6 ? 3 : 4;
-      const fontSize = size === 8 ? '4' : size === 6 ? '5' : '6';
+      const radius = boardSize === 8 ? 2.5 : boardSize === 6 ? 3 : 4;
+      const fontSize = boardSize === 8 ? '4' : boardSize === 6 ? '5' : '6';
       
       // Adjust icon size based on distance for better visibility
       const adjustedRadius = isAdjacent ? radius : radius * 1.2;
@@ -291,8 +324,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
               max-w-full overflow-hidden
             `}
             style={{ 
-              gridTemplateColumns: `repeat(${size}, 1fr)`,
-              maxWidth: size === 8 ? '90vw' : size === 6 ? '85vw' : '80vw'
+              gridTemplateColumns: `repeat(${boardSize}, 1fr)`,
+              maxWidth: boardSize === 8 ? '90vw' : boardSize === 6 ? '85vw' : '80vw'
             }}
           >
             {board.map((row, rowIndex) =>
@@ -370,6 +403,27 @@ const GameBoard: React.FC<GameBoardProps> = ({
           </ul>
         </div>
       )}
+
+      {/* Fireworks Animation */}
+      <FireworksAnimation 
+        isActive={showFireworks} 
+        duration={3000}
+        onComplete={() => {
+          // Fireworks will auto-hide after duration
+        }}
+      />
+
+      {/* Completion Modal */}
+      <CompletionModal
+        isOpen={showCompletionModal}
+        onClose={handleCompletionModalClose}
+        completionTime={completionTime}
+        moveCount={moveCount}
+        opponentMoves={opponentMoves}
+        isMultiplayer={isMultiplayer}
+        difficulty={difficulty}
+        size={size}
+      />
     </div>
   );
 };
