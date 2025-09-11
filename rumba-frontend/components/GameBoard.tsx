@@ -185,7 +185,12 @@ const GameBoard: React.FC<GameBoardProps> = ({
 
   // Create a matrix for cell positions and midpoints
   const createCellMatrix = () => {
-    const cellSize = 100 / boardSize;
+    // Account for padding in the game board - more accurate calculation
+    // Based on the actual padding values used in the CSS classes
+    const paddingPercentage = size === 8 ? 1.5 : size === 6 ? 2 : 2.5; // Approximate padding as percentage
+    const availableWidth = 100 - paddingPercentage;
+    const cellSize = availableWidth / boardSize;
+    
     const matrix: { 
       cells: { x: number; y: number }[][], 
       midpoints: { x: number; y: number }[][]
@@ -194,13 +199,13 @@ const GameBoard: React.FC<GameBoardProps> = ({
       midpoints: []
     };
 
-    // Calculate cell centers with precise positioning
+    // Calculate cell centers with precise positioning including padding offset
     for (let row = 0; row < boardSize; row++) {
       matrix.cells[row] = [];
       for (let col = 0; col < boardSize; col++) {
         matrix.cells[row][col] = {
-          x: (col * cellSize) + (cellSize / 2),
-          y: (row * cellSize) + (cellSize / 2)
+          x: (paddingPercentage / 2) + (col * cellSize) + (cellSize / 2),
+          y: (paddingPercentage / 2) + (row * cellSize) + (cellSize / 2)
         };
       }
     }
@@ -273,47 +278,49 @@ const GameBoard: React.FC<GameBoardProps> = ({
       const midY = (cell1Pos.y + cell2Pos.y) / 2;
       
       const icon = getConstraintIcon(type);
-      const color = type === ConstraintType.EQ ? '#22c55e' : '#ef4444'; // Lighter colors
+      const color = type === ConstraintType.EQ ? '#16a34a' : '#dc2626'; // Darker, more visible colors
       
-      // Check if cells are adjacent (horizontally, vertically, or diagonally)
-      const rowDiff = Math.abs(cell2.row - cell1.row);
-      const colDiff = Math.abs(cell2.col - cell1.col);
-      const isAdjacent = (rowDiff <= 1 && colDiff <= 1) && (rowDiff + colDiff > 0);
+      // Improved scaling based on board size and cell size
+      const baseRadius = boardSize === 8 ? 3.5 : boardSize === 6 ? 4.5 : 5.5;
+      const baseFontSize = boardSize === 8 ? '6' : boardSize === 6 ? '7' : '8';
       
-      // Scale radius based on board size - much smaller
-      const radius = boardSize === 8 ? 2.5 : boardSize === 6 ? 3 : 4;
-      const fontSize = boardSize === 8 ? '4' : boardSize === 6 ? '5' : '6';
+      // Calculate cell size for better proportional scaling
+      const cellSize = boardSize === 8 ? 12.5 : boardSize === 6 ? 16.67 : 20; // Approximate cell size in percentage
+      const scaleFactor = Math.min(cellSize / 20, 1.2); // Scale based on cell size
       
-      // Adjust icon size based on distance for better visibility
-      const adjustedRadius = isAdjacent ? radius : radius * 1.2;
-      const adjustedFontSize = isAdjacent ? fontSize : (parseInt(fontSize) + 1).toString();
+      const adjustedRadius = baseRadius * scaleFactor;
+      const adjustedFontSize = (parseInt(baseFontSize) * scaleFactor).toString();
       
-      // Always use the calculated midpoint for constraint icons
+      // Add slight offset for better visual positioning
       const iconX = midX;
-      const iconY = midY;
+      const iconY = midY - (adjustedRadius * 0.05); // Very slight upward offset for better centering
       
       return (
         <g key={id}>
-          {/* Constraint icon background - smaller and lighter */}
+          {/* Constraint icon background with better visibility */}
           <circle
             cx={iconX}
             cy={iconY}
-            r={adjustedRadius * 0.7}
+            r={adjustedRadius}
             fill={color}
-            opacity="0.6"
+            opacity="0.85"
             stroke="white"
-            strokeWidth="0.3"
+            strokeWidth="0.5"
+            filter="drop-shadow(0 1px 2px rgba(0,0,0,0.3))"
           />
-          {/* Constraint icon */}
+          {/* Constraint icon with better contrast */}
           <text
             x={iconX}
             y={iconY}
             textAnchor="middle"
             dominantBaseline="central"
             fontSize={adjustedFontSize}
-            fontWeight="bold"
+            fontWeight="900"
             fill="white"
-            style={{ userSelect: 'none' }}
+            style={{ 
+              userSelect: 'none',
+              textShadow: '0 1px 2px rgba(0,0,0,0.5)'
+            }}
           >
             {icon}
           </text>
@@ -482,6 +489,13 @@ const GameBoard: React.FC<GameBoardProps> = ({
                 viewBox="0 0 100 100"
                 preserveAspectRatio="xMidYMid meet"
                 className="w-full h-full"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%'
+                }}
               >
                 {renderConstraintIndicators()}
               </svg>
