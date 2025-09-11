@@ -134,64 +134,144 @@ const GameBoard: React.FC<GameBoardProps> = ({
     }
   };
 
-  const getConstraintsForPosition = (row: number, col: number) => {
-    return constraints.filter(constraint => 
-      (constraint.cell1.row === row && constraint.cell1.col === col) ||
-      (constraint.cell2.row === row && constraint.cell2.col === col)
-    );
+
+  // Create a matrix for cell positions and midpoints
+  const createCellMatrix = () => {
+    const cellSize = 100 / size;
+    const matrix: { 
+      cells: { x: number; y: number }[][], 
+      midpoints: { x: number; y: number }[][]
+    } = {
+      cells: [],
+      midpoints: []
+    };
+
+    // Calculate cell centers with precise positioning
+    for (let row = 0; row < size; row++) {
+      matrix.cells[row] = [];
+      for (let col = 0; col < size; col++) {
+        matrix.cells[row][col] = {
+          x: (col * cellSize) + (cellSize / 2),
+          y: (row * cellSize) + (cellSize / 2)
+        };
+      }
+    }
+
+    // Calculate midpoints between cells for better constraint positioning
+    for (let row = 0; row < size; row++) {
+      matrix.midpoints[row] = [];
+      for (let col = 0; col < size; col++) {
+        // For each cell, calculate potential midpoints with adjacent cells
+        const currentCell = matrix.cells[row][col];
+        
+        // Find the best midpoint based on available adjacent cells
+        let bestMidpoint = currentCell; // fallback to current cell
+        
+        // Check horizontal right
+        if (col < size - 1) {
+          const rightCell = matrix.cells[row][col + 1];
+          bestMidpoint = {
+            x: (currentCell.x + rightCell.x) / 2,
+            y: (currentCell.y + rightCell.y) / 2
+          };
+        }
+        // Check vertical bottom
+        else if (row < size - 1) {
+          const bottomCell = matrix.cells[row + 1][col];
+          bestMidpoint = {
+            x: (currentCell.x + bottomCell.x) / 2,
+            y: (currentCell.y + bottomCell.y) / 2
+          };
+        }
+        // Check diagonal bottom-right
+        else if (row < size - 1 && col < size - 1) {
+          const diagonalCell = matrix.cells[row + 1][col + 1];
+          bestMidpoint = {
+            x: (currentCell.x + diagonalCell.x) / 2,
+            y: (currentCell.y + diagonalCell.y) / 2
+          };
+        }
+
+        matrix.midpoints[row][col] = bestMidpoint;
+      }
+    }
+
+    return matrix;
   };
 
   const renderConstraintIndicators = () => {
+    if (!constraints || constraints.length === 0) {
+      return null;
+    }
+    
+    const cellMatrix = createCellMatrix();
+    
     return constraints.map(constraint => {
       const { cell1, cell2, type, id } = constraint;
       
-      // Calculate positions for constraint line/indicator
-      const cell1X = cell1.col * (100 / size) + (50 / size); // Center of cell1
-      const cell1Y = cell1.row * (100 / size) + (50 / size); // Center of cell1
-      const cell2X = cell2.col * (100 / size) + (50 / size); // Center of cell2
-      const cell2Y = cell2.row * (100 / size) + (50 / size); // Center of cell2
+      // Validate cell positions
+      if (cell1.row < 0 || cell1.row >= size || cell1.col < 0 || cell1.col >= size ||
+          cell2.row < 0 || cell2.row >= size || cell2.col < 0 || cell2.col >= size) {
+        console.warn(`Invalid constraint cell positions: ${JSON.stringify(constraint)}`);
+        return null;
+      }
+      
+      // Get cell positions from matrix
+      const cell1Pos = cellMatrix.cells[cell1.row][cell1.col];
+      const cell2Pos = cellMatrix.cells[cell2.row][cell2.col];
       
       // Calculate midpoint for constraint icon
-      const midX = (cell1X + cell2X) / 2;
-      const midY = (cell1Y + cell2Y) / 2;
+      const midX = (cell1Pos.x + cell2Pos.x) / 2;
+      const midY = (cell1Pos.y + cell2Pos.y) / 2;
       
       const icon = getConstraintIcon(type);
+      const color = type === ConstraintType.EQ ? '#22c55e' : '#ef4444'; // Lighter colors
+      
+      // Check if cells are adjacent (horizontally, vertically, or diagonally)
+      const rowDiff = Math.abs(cell2.row - cell1.row);
+      const colDiff = Math.abs(cell2.col - cell1.col);
+      const isAdjacent = (rowDiff <= 1 && colDiff <= 1) && (rowDiff + colDiff > 0);
+      
+      // Scale radius based on board size - much smaller
+      const radius = size === 8 ? 2.5 : size === 6 ? 3 : 4;
+      const fontSize = size === 8 ? '4' : size === 6 ? '5' : '6';
+      
+      // Adjust icon size based on distance for better visibility
+      const adjustedRadius = isAdjacent ? radius : radius * 1.2;
+      const adjustedFontSize = isAdjacent ? fontSize : (parseInt(fontSize) + 1).toString();
+      
+      // Always use the calculated midpoint for constraint icons
+      const iconX = midX;
+      const iconY = midY;
       
       return (
         <g key={id}>
-          {/* Connection line */}
-          <line
-            x1={`${cell1X}%`}
-            y1={`${cell1Y}%`}
-            x2={`${cell2X}%`}
-            y2={`${cell2Y}%`}
-            stroke={type === ConstraintType.EQ ? '#16a34a' : '#dc2626'}
-            strokeWidth="2"
-            strokeDasharray={type === ConstraintType.NEQ ? '4 4' : '0'}
-            opacity="0.7"
+          {/* Constraint icon background - smaller and lighter */}
+          <circle
+            cx={iconX}
+            cy={iconY}
+            r={adjustedRadius * 0.7}
+            fill={color}
+            opacity="0.6"
+            stroke="white"
+            strokeWidth="0.3"
           />
           {/* Constraint icon */}
-          <circle
-            cx={`${midX}%`}
-            cy={`${midY}%`}
-            r="12"
-            fill={type === ConstraintType.EQ ? '#16a34a' : '#dc2626'}
-            opacity="0.9"
-          />
           <text
-            x={`${midX}%`}
-            y={`${midY}%`}
+            x={iconX}
+            y={iconY}
             textAnchor="middle"
             dominantBaseline="central"
-            fontSize="12"
+            fontSize={adjustedFontSize}
             fontWeight="bold"
             fill="white"
+            style={{ userSelect: 'none' }}
           >
             {icon}
           </text>
         </g>
       );
-    });
+    }).filter(Boolean); // Remove null entries
   };
 
   const handleClick = (row: number, col: number) => {
@@ -244,14 +324,23 @@ const GameBoard: React.FC<GameBoardProps> = ({
           </div>
           
           {/* Constraint indicators overlay */}
-          {constraints.length > 0 && (
-            <svg
+          {constraints && constraints.length > 0 && (
+            <div
+              id="constraint-indicators-overlay"
               className="absolute inset-0 w-full h-full pointer-events-none"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
+              style={{ zIndex: 10 }}
             >
-              {renderConstraintIndicators()}
-            </svg>
+              <svg
+                id="constraint-indicators-svg"
+                width="100%"
+                height="100%"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="xMidYMid meet"
+                className="w-full h-full"
+              >
+                {renderConstraintIndicators()}
+              </svg>
+            </div>
           )}
         </div>
       </div>

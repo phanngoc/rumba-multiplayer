@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { CellValue, GameBoard, GameDifficulty, GameState, Position, ImmutableBoard } from '@/lib/game-types';
+import { CellValue, GameBoard, GameDifficulty, GameState, Position, ImmutableBoard, PairConstraint } from '@/lib/game-types';
 import { GameLogic } from '@/lib/game-logic';
 import { PuzzleGenerator } from '@/lib/puzzle-generator';
 
@@ -29,13 +29,14 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
   const [isLoading, setIsLoading] = useState(false);
 
   // Update game state when board changes
-  const updateGameState = useCallback((board: GameBoard, immutable?: ImmutableBoard) => {
+  const updateGameState = useCallback((board: GameBoard, immutable?: ImmutableBoard, constraints?: PairConstraint[]) => {
     const validation = GameLogic.validateBoard(board);
     const isComplete = GameLogic.isComplete(board);
     
     setGameState(prevState => ({
       board,
       immutable: immutable || prevState.immutable,
+      constraints: constraints || prevState.constraints,
       size: board.length,
       isComplete,
       isValid: validation.isValid,
@@ -54,11 +55,13 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
       
       let puzzle: GameBoard;
       let immutable: ImmutableBoard;
+      let constraints: PairConstraint[] = [];
       
       try {
         const puzzleBoard = PuzzleGenerator.generatePuzzle(size, difficulty);
         puzzle = puzzleBoard.values;
         immutable = puzzleBoard.immutable;
+        constraints = puzzleBoard.constraints || [];
       } catch (generatorError) {
         console.warn('Puzzle generator failed, creating simple puzzle:', generatorError);
         // Create a simple puzzle as fallback
@@ -77,7 +80,7 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
       setOriginalPuzzle(puzzle);
       setImmutableCells(immutable);
       setCurrentBoard(GameLogic.copyBoard(puzzle));
-      updateGameState(puzzle, immutable);
+      updateGameState(puzzle, immutable, constraints);
     } catch (error) {
       console.error('Failed to generate puzzle:', error);
       // Final fallback to empty board
@@ -86,11 +89,11 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
       setOriginalPuzzle(emptyBoard);
       setImmutableCells(emptyImmutable);
       setCurrentBoard(emptyBoard);
-      updateGameState(emptyBoard, emptyImmutable);
+      updateGameState(emptyBoard, emptyImmutable, []);
     } finally {
       setIsLoading(false);
     }
-  }, [size, difficulty]);
+  }, [size, difficulty, updateGameState]);
 
   // Handle cell click (left click: Empty → X → O)
   const handleCellClick = useCallback((row: number, col: number) => {

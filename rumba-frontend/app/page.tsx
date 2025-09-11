@@ -34,6 +34,7 @@ export default function Home() {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joinCode, setJoinCode] = useState('');
 
+
   const {
     user,
     currentGame,
@@ -224,8 +225,10 @@ export default function Home() {
                 onCellRightClick={handleCellRightClick}
                 errors={gameState.errors}
                 hintPosition={hintPosition}
+                constraints={gameState.constraints}
               />
             </div>
+
             
             {/* Game Controls Below Board */}
             <div className="w-full max-w-md">
