@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { CellValue, GameBoard as GameBoardType, PairConstraint, ConstraintType } from '@/lib/game-types';
 import FireworksAnimation from './FireworksAnimation';
 import CompletionModal from './CompletionModal';
@@ -44,6 +44,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const [touchStartTime, setTouchStartTime] = useState<number>(0);
   const touchTimer = useRef<NodeJS.Timeout | null>(null);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const boardContainerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
 
   const getCellContent = (value: CellValue) => {
     switch (value) {
@@ -73,6 +75,26 @@ const GameBoard: React.FC<GameBoardProps> = ({
       setShowCompletionModal(true);
     }
   }, [isCompleted, showCompletionModal]);
+
+  // Get container size for accurate coordinate calculations
+  useEffect(() => {
+    const updateContainerSize = () => {
+      if (boardContainerRef.current) {
+        const rect = boardContainerRef.current.getBoundingClientRect();
+        setContainerSize({
+          width: rect.width,
+          height: rect.height
+        });
+      }
+    };
+
+    // Initial measurement
+    updateContainerSize();
+
+    // Update on resize
+    window.addEventListener('resize', updateContainerSize);
+    return () => window.removeEventListener('resize', updateContainerSize);
+  }, [boardSize, size]);
 
   const handleCompletionModalClose = () => {
     setShowCompletionModal(false);
@@ -183,69 +205,101 @@ const GameBoard: React.FC<GameBoardProps> = ({
   };
 
 
-  // Create a matrix for cell positions and midpoints
+  // Create a matrix for cell positions and midpoints using vw/vh-based calculations
   const createCellMatrix = () => {
-    // Account for padding in the game board - more accurate calculation
-    // Based on the actual padding values used in the CSS classes
-    const paddingPercentage = size === 8 ? 1.5 : size === 6 ? 2 : 2.5; // Approximate padding as percentage
-    const availableWidth = 100 - paddingPercentage;
-    const cellSize = availableWidth / boardSize;
+    if (!containerSize) {
+      // Fallback to estimated values if container size not available yet
+      const paddingPercentage = size === 8 ? 1.5 : size === 6 ? 2 : 2.5;
+      const gapPercentage = size === 8 ? 0.3 : size === 6 ? 0.4 : 0.5;
+      const totalGapSpace = gapPercentage * (boardSize - 1);
+      const availableWidth = 100 - (paddingPercentage * 2);
+      const availableHeight = 100 - (paddingPercentage * 2);
+      const cellSizeX = (availableWidth - totalGapSpace) / boardSize;
+      const cellSizeY = (availableHeight - totalGapSpace) / boardSize;
+      
+      return {
+        cells: Array(boardSize).fill(null).map((_, row) =>
+          Array(boardSize).fill(null).map((_, col) => ({
+            x: paddingPercentage + (col * (cellSizeX + gapPercentage)) + (cellSizeX / 2),
+            y: paddingPercentage + (row * (cellSizeY + gapPercentage)) + (cellSizeY / 2)
+          }))
+        ),
+        cellSizeX: cellSizeX,
+        cellSizeY: cellSizeY
+      };
+    }
+
+    // Calculate padding and gap in vw/vh units
+    // CSS: p-3 sm:p-4 (0.75rem to 1rem), gap-1 sm:gap-2 (0.25rem to 0.5rem)
+    // Convert to vw/vh: assume base font size 16px, viewport width ~375px (mobile) to 1920px (desktop)
+    // For responsive: use smaller vw on mobile, larger on desktop
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
+    const isMobile = viewportWidth < 640; // sm breakpoint
     
-    const matrix: { 
-      cells: { x: number; y: number }[][], 
-      midpoints: { x: number; y: number }[][]
+    // Padding: p-3 = 0.75rem ≈ 12px, p-4 = 1rem = 16px
+    // Convert to vw: 12px / viewportWidth * 100, 16px / viewportWidth * 100
+    const paddingPx = isMobile ? 12 : 16; // p-3 : p-4
+    const paddingVw = (paddingPx / viewportWidth) * 100;
+    
+    // Gap: gap-1 = 0.25rem ≈ 4px, gap-2 = 0.5rem = 8px
+    const gapPx = isMobile ? 4 : 8; // gap-1 : gap-2
+    const gapVw = (gapPx / viewportWidth) * 100;
+    
+    // Convert to percentage of container for SVG viewBox (0 0 100 100)
+    // Calculate separately for X (width) and Y (height)
+    const containerWidth = containerSize.width;
+    const containerHeight = containerSize.height;
+    
+    // Padding percentages - separate for X and Y
+    const paddingPercentageX = (paddingPx / containerWidth) * 100;
+    const paddingPercentageY = (paddingPx / containerHeight) * 100;
+    
+    // Gap percentages - separate for X and Y
+    const gapPercentageX = (gapPx / containerWidth) * 100;
+    const gapPercentageY = (gapPx / containerHeight) * 100;
+    
+    // Total gap space - separate for X and Y
+    const totalGapSpaceX = gapPercentageX * (boardSize - 1);
+    const totalGapSpaceY = gapPercentageY * (boardSize - 1);
+    
+    // Available space - separate for X and Y
+    const availableWidth = 100 - (paddingPercentageX * 2);
+    const availableHeight = 100 - (paddingPercentageY * 2);
+    
+    // Cell sizes - separate for X and Y
+    const cellSizeX = (availableWidth - totalGapSpaceX) / boardSize;
+    const cellSizeY = (availableHeight - totalGapSpaceY) / boardSize;
+    
+    console.log(`[DEBUG] size:`, size);
+    console.log(`[DEBUG] containerSize:`, containerSize);
+    console.log(`[DEBUG] viewportWidth:`, viewportWidth);
+    console.log(`[DEBUG] paddingPx:`, paddingPx, `paddingVw:`, paddingVw);
+    console.log(`[DEBUG] paddingPercentageX:`, paddingPercentageX, `paddingPercentageY:`, paddingPercentageY);
+    console.log(`[DEBUG] gapPx:`, gapPx, `gapVw:`, gapVw);
+    console.log(`[DEBUG] gapPercentageX:`, gapPercentageX, `gapPercentageY:`, gapPercentageY);
+    console.log(`[DEBUG] cellSizeX:`, cellSizeX, `cellSizeY:`, cellSizeY);
+    console.log(`[DEBUG] boardSize:`, boardSize);
+    
+    const matrix: {
+      cells: { x: number; y: number }[][],
+      cellSizeX: number,
+      cellSizeY: number
     } = {
       cells: [],
-      midpoints: []
+      cellSizeX: cellSizeX,
+      cellSizeY: cellSizeY
     };
 
-    // Calculate cell centers with precise positioning including padding offset
+    // Calculate cell centers with precise positioning including padding offset and gaps
+    // Use separate calculations for X and Y
     for (let row = 0; row < boardSize; row++) {
       matrix.cells[row] = [];
       for (let col = 0; col < boardSize; col++) {
+        // Calculate position: padding + (index * (cellSize + gap)) + cellSize/2
         matrix.cells[row][col] = {
-          x: (paddingPercentage / 2) + (col * cellSize) + (cellSize / 2),
-          y: (paddingPercentage / 2) + (row * cellSize) + (cellSize / 2)
+          x: paddingPercentageX + (col * (cellSizeX + gapPercentageX)) + (cellSizeX / 2),
+          y: paddingPercentageY + (row * (cellSizeY + gapPercentageY)) + (cellSizeY / 2)
         };
-      }
-    }
-
-    // Calculate midpoints between cells for better constraint positioning
-    for (let row = 0; row < boardSize; row++) {
-      matrix.midpoints[row] = [];
-      for (let col = 0; col < boardSize; col++) {
-        // For each cell, calculate potential midpoints with adjacent cells
-        const currentCell = matrix.cells[row][col];
-        
-        // Find the best midpoint based on available adjacent cells
-        let bestMidpoint = currentCell; // fallback to current cell
-        
-        // Check horizontal right
-        if (col < boardSize - 1) {
-          const rightCell = matrix.cells[row][col + 1];
-          bestMidpoint = {
-            x: (currentCell.x + rightCell.x) / 2,
-            y: (currentCell.y + rightCell.y) / 2
-          };
-        }
-        // Check vertical bottom
-        else if (row < boardSize - 1) {
-          const bottomCell = matrix.cells[row + 1][col];
-          bestMidpoint = {
-            x: (currentCell.x + bottomCell.x) / 2,
-            y: (currentCell.y + bottomCell.y) / 2
-          };
-        }
-        // Check diagonal bottom-right
-        else if (row < boardSize - 1 && col < boardSize - 1) {
-          const diagonalCell = matrix.cells[row + 1][col + 1];
-          bestMidpoint = {
-            x: (currentCell.x + diagonalCell.x) / 2,
-            y: (currentCell.y + diagonalCell.y) / 2
-          };
-        }
-
-        matrix.midpoints[row][col] = bestMidpoint;
       }
     }
 
@@ -258,6 +312,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
     }
     
     const cellMatrix = createCellMatrix();
+    const cellSizeX = cellMatrix.cellSizeX;
+    const cellSizeY = cellMatrix.cellSizeY;
     
     return constraints.map(constraint => {
       const { cell1, cell2, type, id } = constraint;
@@ -273,9 +329,35 @@ const GameBoard: React.FC<GameBoardProps> = ({
       const cell1Pos = cellMatrix.cells[cell1.row][cell1.col];
       const cell2Pos = cellMatrix.cells[cell2.row][cell2.col];
       
-      // Calculate midpoint for constraint icon
-      const midX = (cell1Pos.x + cell2Pos.x) / 2;
-      const midY = (cell1Pos.y + cell2Pos.y) / 2;
+      // Determine constraint direction (horizontal or vertical)
+      const isHorizontal = cell1.row === cell2.row; // Same row, different columns
+      const isVertical = cell1.col === cell2.col; // Same column, different rows
+      
+      // Calculate icon position based on constraint direction
+      // Icon should be placed exactly on the edge between two adjacent cells
+      let iconX: number;
+      let iconY: number;
+      
+      if (isHorizontal) {
+        // Horizontal constraint: place on vertical edge between cells
+        // The edge is at the right side of cell1 (or left side of cell2)
+        // cell1Pos.x is the center of cell1, so right edge = cell1Pos.x + cellSizeX/2
+        iconX = cell1Pos.x + (cellSizeX / 2);
+        // Y position is the same for both cells (same row)
+        iconY = cell1Pos.y;
+      } else if (isVertical) {
+        // Vertical constraint: place on horizontal edge between cells
+        // X position is the same for both cells (same column)
+        iconX = cell1Pos.x;
+        // The edge is at the bottom of cell1 (or top of cell2)
+        // cell1Pos.y is the center of cell1, so bottom edge = cell1Pos.y + cellSizeY/2
+        iconY = cell1Pos.y + (cellSizeY / 2);
+      } else {
+        // Fallback: diagonal constraint (shouldn't happen based on puzzle generator)
+        // Use midpoint for both
+        iconX = (cell1Pos.x + cell2Pos.x) / 2;
+        iconY = (cell1Pos.y + cell2Pos.y) / 2;
+      }
       
       const icon = getConstraintIcon(type);
       const color = type === ConstraintType.EQ ? '#16a34a' : '#dc2626'; // Darker, more visible colors
@@ -285,15 +367,11 @@ const GameBoard: React.FC<GameBoardProps> = ({
       const baseFontSize = boardSize === 8 ? '4' : boardSize === 6 ? '5' : '6';
       
       // Calculate cell size for better proportional scaling
-      const cellSize = boardSize === 8 ? 12.5 : boardSize === 6 ? 16.67 : 20; // Approximate cell size in percentage
-      const scaleFactor = Math.min(cellSize / 20, 0.8); // Smaller scale factor
+      const approximateCellSize = boardSize === 8 ? 12.5 : boardSize === 6 ? 16.67 : 20; // Approximate cell size in percentage
+      const scaleFactor = Math.min(approximateCellSize / 20, 0.8); // Smaller scale factor
       
       const adjustedRadius = baseRadius * scaleFactor;
       const adjustedFontSize = (parseInt(baseFontSize) * scaleFactor).toString();
-      
-      // Add slight offset for better visual positioning
-      const iconX = midX;
-      const iconY = midY - (adjustedRadius * 0.05); // Very slight upward offset for better centering
       
       return (
         <g key={id}>
@@ -344,9 +422,9 @@ const GameBoard: React.FC<GameBoardProps> = ({
             style={{ 
               gridTemplateColumns: `repeat(${size}, 1fr)`,
               display: 'grid',
-              gap: size === 8 ? '0.25rem' : size === 6 ? '0.5rem' : '0.75rem',
-              paddingLeft: size === 8 ? '0.75rem' : size === 6 ? '1rem' : '1.25rem',
-              paddingRight: size === 8 ? '0.75rem' : size === 6 ? '1rem' : '1.25rem'
+              gap: size === 8 ? '0.5vw' : size === 6 ? '1vw' : '1.5vw',
+              paddingLeft: size === 8 ? '1.5vw' : size === 6 ? '2vw' : '2.5vw',
+              paddingRight: size === 8 ? '1.5vw' : size === 6 ? '2vw' : '2.5vw'
             }}
           >
             {Array.from({ length: size }, (_, colIndex) => {
@@ -377,7 +455,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
                       size === 8 ? 'text-xs' : size === 6 ? 'text-sm' : 'text-base'
                     }`}
                     style={{ 
-                      marginBottom: rowIndex < board.length - 1 ? (size === 8 ? '0.25rem' : size === 6 ? '0.5rem' : '0.75rem') : '0'
+                      marginBottom: rowIndex < board.length - 1 ? (size === 8 ? '0.5vw' : size === 6 ? '1vw' : '1.5vw') : '0'
                     }}
                   >
                     ({xCount}/{oCount})
@@ -388,6 +466,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
 
             {/* Game Board */}
             <div 
+              ref={boardContainerRef}
               className={`
                 game-board inline-grid gap-1 sm:gap-2 p-3 sm:p-4 
                 bg-gradient-to-br from-gray-50 to-gray-100 
@@ -439,7 +518,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
                       size === 8 ? 'text-xs' : size === 6 ? 'text-sm' : 'text-base'
                     }`}
                     style={{ 
-                      marginBottom: rowIndex < board.length - 1 ? (size === 8 ? '0.25rem' : size === 6 ? '0.5rem' : '0.75rem') : '0'
+                      marginBottom: rowIndex < board.length - 1 ? (size === 8 ? '0.5vw' : size === 6 ? '1vw' : '1.5vw') : '0'
                     }}
                   >
                     ({xCount}/{oCount})
@@ -455,9 +534,9 @@ const GameBoard: React.FC<GameBoardProps> = ({
             style={{ 
               gridTemplateColumns: `repeat(${size}, 1fr)`,
               display: 'grid',
-              gap: size === 8 ? '0.25rem' : size === 6 ? '0.5rem' : '0.75rem',
-              paddingLeft: size === 8 ? '0.75rem' : size === 6 ? '1rem' : '1.25rem',
-              paddingRight: size === 8 ? '0.75rem' : size === 6 ? '1rem' : '1.25rem'
+              gap: size === 8 ? '0.5vw' : size === 6 ? '1vw' : '1.5vw',
+              paddingLeft: size === 8 ? '1.5vw' : size === 6 ? '2vw' : '2.5vw',
+              paddingRight: size === 8 ? '1.5vw' : size === 6 ? '2vw' : '2.5vw'
             }}
           >
             {Array.from({ length: size }, (_, colIndex) => {

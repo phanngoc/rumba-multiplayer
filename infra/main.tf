@@ -173,3 +173,233 @@ resource "aws_eip" "rumba_eip" {
 
   depends_on = [aws_instance.rumba_server]
 }
+
+# IAM role for EventBridge to manage EC2 instances
+resource "aws_iam_role" "eventbridge_ec2_role" {
+  name = "eventbridge-ec2-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "events.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name = "eventbridge-ec2-role"
+  }
+}
+
+# IAM policy for EventBridge to start/stop EC2 instances
+resource "aws_iam_policy" "eventbridge_ec2_policy" {
+  name        = "eventbridge-ec2-policy"
+  description = "Policy for EventBridge to start/stop EC2 instances"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:StartInstances",
+          "ec2:StopInstances",
+          "ec2:DescribeInstances"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "eventbridge-ec2-policy"
+  }
+}
+
+# Attach policy to role
+resource "aws_iam_role_policy_attachment" "eventbridge_ec2_policy_attachment" {
+  role       = aws_iam_role.eventbridge_ec2_role.name
+  policy_arn = aws_iam_policy.eventbridge_ec2_policy.arn
+}
+
+# EventBridge rule to stop EC2 instance at 21:00 (9 PM) daily
+resource "aws_cloudwatch_event_rule" "stop_instance_rule" {
+  name                = "stop-rumba-instance"
+  description         = "Stop Rumba EC2 instance at 21:00 daily"
+  schedule_expression = "cron(0 21 * * ? *)"  # 21:00 UTC daily
+
+  tags = {
+    Name = "stop-rumba-instance-rule"
+  }
+}
+
+# Lambda function to stop EC2 instance
+resource "aws_lambda_function" "stop_instance_lambda" {
+  function_name    = "stop-rumba-instance"
+  role            = aws_iam_role.lambda_ec2_role.arn
+  handler         = "index.handler"
+  runtime         = "python3.9"
+  timeout         = 30
+
+  filename         = data.archive_file.stop_lambda_zip.output_path
+  source_code_hash = data.archive_file.stop_lambda_zip.output_base64sha256
+
+  environment {
+    variables = {
+      INSTANCE_ID = aws_instance.rumba_server.id
+    }
+  }
+
+  tags = {
+    Name = "stop-rumba-instance-lambda"
+  }
+}
+
+# Lambda function to start EC2 instance
+resource "aws_lambda_function" "start_instance_lambda" {
+  function_name    = "start-rumba-instance"
+  role            = aws_iam_role.lambda_ec2_role.arn
+  handler         = "index.handler"
+  runtime         = "python3.9"
+  timeout         = 30
+
+  filename         = data.archive_file.start_lambda_zip.output_path
+  source_code_hash = data.archive_file.start_lambda_zip.output_base64sha256
+
+  environment {
+    variables = {
+      INSTANCE_ID = aws_instance.rumba_server.id
+    }
+  }
+
+  tags = {
+    Name = "start-rumba-instance-lambda"
+  }
+}
+
+# Create zip file for stop Lambda function
+data "archive_file" "stop_lambda_zip" {
+  type        = "zip"
+  source_file = "${path.module}/lambda/stop_instance.py"
+  output_path = "${path.module}/lambda/stop_instance.zip"
+}
+
+# Create zip file for start Lambda function
+data "archive_file" "start_lambda_zip" {
+  type        = "zip"
+  source_file = "${path.module}/lambda/start_instance.py"
+  output_path = "${path.module}/lambda/start_instance.zip"
+}
+
+# IAM role for Lambda functions
+resource "aws_iam_role" "lambda_ec2_role" {
+  name = "lambda-ec2-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name = "lambda-ec2-role"
+  }
+}
+
+# IAM policy for Lambda to start/stop EC2 instances
+resource "aws_iam_policy" "lambda_ec2_policy" {
+  name        = "lambda-ec2-policy"
+  description = "Policy for Lambda to start/stop EC2 instances"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:StartInstances",
+          "ec2:StopInstances",
+          "ec2:DescribeInstances"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "lambda-ec2-policy"
+  }
+}
+
+# Attach policy to Lambda role
+resource "aws_iam_role_policy_attachment" "lambda_ec2_policy_attachment" {
+  role       = aws_iam_role.lambda_ec2_role.name
+  policy_arn = aws_iam_policy.lambda_ec2_policy.arn
+}
+
+# EventBridge target to stop EC2 instance
+resource "aws_cloudwatch_event_target" "stop_instance_target" {
+  rule      = aws_cloudwatch_event_rule.stop_instance_rule.name
+  target_id = "StopInstanceTarget"
+  arn       = aws_lambda_function.stop_instance_lambda.arn
+}
+
+# Permission for EventBridge to invoke Lambda
+resource "aws_lambda_permission" "allow_eventbridge_stop" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.stop_instance_lambda.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.stop_instance_rule.arn
+}
+
+# EventBridge rule to start EC2 instance at 08:00 (8 AM) daily
+resource "aws_cloudwatch_event_rule" "start_instance_rule" {
+  name                = "start-rumba-instance"
+  description         = "Start Rumba EC2 instance at 08:00 daily"
+  schedule_expression = "cron(0 8 * * ? *)"  # 08:00 UTC daily
+
+  tags = {
+    Name = "start-rumba-instance-rule"
+  }
+}
+
+# EventBridge target to start EC2 instance
+resource "aws_cloudwatch_event_target" "start_instance_target" {
+  rule      = aws_cloudwatch_event_rule.start_instance_rule.name
+  target_id = "StartInstanceTarget"
+  arn       = aws_lambda_function.start_instance_lambda.arn
+}
+
+# Permission for EventBridge to invoke Lambda
+resource "aws_lambda_permission" "allow_eventbridge_start" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.start_instance_lambda.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.start_instance_rule.arn
+}
+
+# Data source to get current AWS account ID
+data "aws_caller_identity" "current" {}
