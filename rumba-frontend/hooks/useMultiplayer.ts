@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { MultiplayerService, GameInfo, MultiplayerEvents } from '@/lib/multiplayer-service';
 import { UserService, User } from '@/lib/user-service';
-import { GameBoard } from '@/lib/game-types';
+import { GameBoard, PairConstraint } from '@/lib/game-types';
 
 export interface UseMultiplayerOptions {
   onGameStart?: (gameInfo: GameInfo) => void;
@@ -121,14 +121,14 @@ export function useMultiplayer(options: UseMultiplayerOptions = {}) {
     };
   }, [user]);
 
-  const createGame = useCallback(async (boardSize: number, puzzle: GameBoard, solution: GameBoard) => {
+  const createGame = useCallback(async (boardSize: number, puzzle: GameBoard, solution: GameBoard, constraints?: PairConstraint[]) => {
     if (!user) {
       throw new Error('User not initialized');
     }
 
     setIsLoading(true);
     try {
-      const gameInfo = await MultiplayerService.createGame(user, boardSize, puzzle, solution);
+      const gameInfo = await MultiplayerService.createGame(user, boardSize, puzzle, solution, constraints);
       setCurrentGame(gameInfo);
       
       // Join the created game

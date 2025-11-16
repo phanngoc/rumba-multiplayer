@@ -21,6 +21,7 @@ interface GameBoardProps {
   difficulty?: string;
   size?: number;
   onCompletionModalClose?: () => void;
+  onPlayNext?: () => void;
 }
 
 const GameBoard: React.FC<GameBoardProps> = ({ 
@@ -38,7 +39,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
   isMultiplayer = false,
   difficulty = 'Medium',
   size = 6,
-  onCompletionModalClose
+  onCompletionModalClose,
+  onPlayNext
 }) => {
   const boardSize = board.length;
   const [touchStartTime, setTouchStartTime] = useState<number>(0);
@@ -225,7 +227,9 @@ const GameBoard: React.FC<GameBoardProps> = ({
           }))
         ),
         cellSizeX: cellSizeX,
-        cellSizeY: cellSizeY
+        cellSizeY: cellSizeY,
+        gapPercentageX: gapPercentage,
+        gapPercentageY: gapPercentage
       };
     }
 
@@ -283,11 +287,15 @@ const GameBoard: React.FC<GameBoardProps> = ({
     const matrix: {
       cells: { x: number; y: number }[][],
       cellSizeX: number,
-      cellSizeY: number
+      cellSizeY: number,
+      gapPercentageX: number,
+      gapPercentageY: number
     } = {
       cells: [],
       cellSizeX: cellSizeX,
-      cellSizeY: cellSizeY
+      cellSizeY: cellSizeY,
+      gapPercentageX: gapPercentageX,
+      gapPercentageY: gapPercentageY
     };
 
     // Calculate cell centers with precise positioning including padding offset and gaps
@@ -314,6 +322,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
     const cellMatrix = createCellMatrix();
     const cellSizeX = cellMatrix.cellSizeX;
     const cellSizeY = cellMatrix.cellSizeY;
+    const gapPercentageX = cellMatrix.gapPercentageX;
+    const gapPercentageY = cellMatrix.gapPercentageY;
     
     return constraints.map(constraint => {
       const { cell1, cell2, type, id } = constraint;
@@ -334,30 +344,41 @@ const GameBoard: React.FC<GameBoardProps> = ({
       const isVertical = cell1.col === cell2.col; // Same column, different rows
       
       // Calculate icon position based on constraint direction
-      // Icon should be placed exactly on the edge between two adjacent cells
+      // Icon should be placed exactly in the middle of the gap between two adjacent cells
       let iconX: number;
       let iconY: number;
       
       if (isHorizontal) {
-        // Horizontal constraint: place on vertical edge between cells
-        // The edge is at the right side of cell1 (or left side of cell2)
-        // cell1Pos.x is the center of cell1, so right edge = cell1Pos.x + cellSizeX/2
-        iconX = cell1Pos.x + (cellSizeX / 2);
+        // Horizontal constraint: place in the middle of vertical gap between cells
+        // Right edge of cell1 + half of gap = cell1Pos.x + cellSizeX/2 + gapPercentageX/2
+        iconX = cell1Pos.x + (cellSizeX / 2) + (gapPercentageX / 2);
         // Y position is the same for both cells (same row)
         iconY = cell1Pos.y;
       } else if (isVertical) {
-        // Vertical constraint: place on horizontal edge between cells
+        // Vertical constraint: place in the middle of horizontal gap between cells
         // X position is the same for both cells (same column)
         iconX = cell1Pos.x;
-        // The edge is at the bottom of cell1 (or top of cell2)
-        // cell1Pos.y is the center of cell1, so bottom edge = cell1Pos.y + cellSizeY/2
-        iconY = cell1Pos.y + (cellSizeY / 2);
+        // Bottom edge of cell1 + half of gap = cell1Pos.y + cellSizeY/2 + gapPercentageY/2
+        iconY = cell1Pos.y + (cellSizeY / 2) + (gapPercentageY / 2);
       } else {
         // Fallback: diagonal constraint (shouldn't happen based on puzzle generator)
         // Use midpoint for both
         iconX = (cell1Pos.x + cell2Pos.x) / 2;
         iconY = (cell1Pos.y + cell2Pos.y) / 2;
       }
+      
+      // Debug logs for constraint positioning
+      console.log(`[DEBUG Constraint ${id}]`, {
+        type,
+        direction: isHorizontal ? 'horizontal' : isVertical ? 'vertical' : 'diagonal',
+        cell1: { row: cell1.row, col: cell1.col, pos: cell1Pos },
+        cell2: { row: cell2.row, col: cell2.col, pos: cell2Pos },
+        cellSizeX,
+        cellSizeY,
+        gapPercentageX,
+        gapPercentageY,
+        iconPosition: { iconX, iconY }
+      });
       
       const icon = getConstraintIcon(type);
       const color = type === ConstraintType.EQ ? '#16a34a' : '#dc2626'; // Darker, more visible colors
@@ -628,6 +649,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
         isMultiplayer={isMultiplayer}
         difficulty={difficulty}
         size={size}
+        onPlayNext={onPlayNext}
       />
     </div>
   );

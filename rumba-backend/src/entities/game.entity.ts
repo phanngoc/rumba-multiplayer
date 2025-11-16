@@ -47,6 +47,9 @@ export class Game {
   @Column({ name: 'solution_json', type: 'text' })
   solutionJson: string;
 
+  @Column({ name: 'constraints_json', type: 'text', nullable: true })
+  constraintsJson: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

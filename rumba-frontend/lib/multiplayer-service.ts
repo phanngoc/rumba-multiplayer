@@ -1,7 +1,7 @@
 'use client';
 
 import { io, Socket } from 'socket.io-client';
-import { GameBoard } from './game-types';
+import { GameBoard, PairConstraint } from './game-types';
 import { User } from './user-service';
 
 const API_BASE_URL = 'http://localhost:3005';
@@ -14,6 +14,7 @@ export interface GameInfo {
   boardSize: number;
   puzzleJson: string;
   solutionJson: string;
+  constraintsJson?: string | null;
   creator?: {
     userId: string;
     nickname: string;
@@ -69,7 +70,8 @@ export class MultiplayerService {
     user: User, 
     boardSize: number, 
     puzzle: GameBoard, 
-    solution: GameBoard
+    solution: GameBoard,
+    constraints?: PairConstraint[]
   ): Promise<GameInfo> {
     const response = await fetch(`${API_BASE_URL}/games`, {
       method: 'POST',
@@ -81,6 +83,7 @@ export class MultiplayerService {
         boardSize,
         puzzleJson: JSON.stringify(puzzle),
         solutionJson: JSON.stringify(solution),
+        constraintsJson: constraints ? JSON.stringify(constraints) : undefined,
       }),
     });
 

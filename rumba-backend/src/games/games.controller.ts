@@ -52,6 +52,9 @@ export class GamesController {
           code: game.code,
           gameState: game.gameState,
           boardSize: game.boardSize,
+          puzzleJson: game.puzzleJson,
+          solutionJson: game.solutionJson,
+          constraintsJson: game.constraintsJson,
           createdAt: game.createdAt,
         },
         message: 'Game created successfully'
@@ -92,6 +95,7 @@ export class GamesController {
           boardSize: game.boardSize,
           puzzleJson: game.puzzleJson,
           solutionJson: game.solutionJson,
+          constraintsJson: game.constraintsJson,
           creator: game.creator ? {
             userId: game.creator.userId,
             nickname: game.creator.nickname,
@@ -190,6 +194,7 @@ export class GamesController {
           boardSize: game.boardSize,
           puzzleJson: game.puzzleJson,
           solutionJson: game.solutionJson,
+          constraintsJson: game.constraintsJson,
           creator: game.creator ? {
             userId: game.creator.userId,
             nickname: game.creator.nickname,

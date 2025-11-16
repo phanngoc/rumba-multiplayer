@@ -9,6 +9,7 @@ export interface CreateGameDto {
   boardSize: number;
   puzzleJson: string;
   solutionJson: string;
+  constraintsJson?: string;
 }
 
 @Injectable()
@@ -20,7 +21,7 @@ export class GamesService {
   ) {}
 
   async createGame(createGameDto: CreateGameDto): Promise<Game> {
-    const { userId, boardSize, puzzleJson, solutionJson } = createGameDto;
+    const { userId, boardSize, puzzleJson, solutionJson, constraintsJson } = createGameDto;
 
     // Verify user exists
     const user = await this.usersService.findByUserId(userId);
@@ -38,6 +39,7 @@ export class GamesService {
       boardSize,
       puzzleJson,
       solutionJson,
+      constraintsJson: constraintsJson || null,
     });
 
     return await this.gamesRepository.save(game);

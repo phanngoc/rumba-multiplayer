@@ -10,6 +10,7 @@ import { useGame } from '@/hooks/useGame';
 import { useMultiplayer } from '@/hooks/useMultiplayer';
 import { PuzzleGenerator } from '@/lib/puzzle-generator';
 import { GameLogic } from '@/lib/game-logic';
+import { GameInfo } from '@/lib/multiplayer-service';
 
 export default function Home() {
   const {
@@ -32,9 +33,11 @@ export default function Home() {
     resetBoard,
     showSolution,
     generateNewPuzzle,
+    playNext,
     handleSizeChange,
     handleDifficultyChange,
-    setOpponentMoves
+    setOpponentMoves,
+    loadMultiplayerBoard
   } = useGame();
 
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -55,11 +58,37 @@ export default function Home() {
     completeGame,
   } = useMultiplayer({
     onGameStart: (gameInfo) => {
-      console.log('Game started:', gameInfo);
-      if (gameInfo.puzzleJson) {
-        // Load the multiplayer puzzle
-        const puzzle = JSON.parse(gameInfo.puzzleJson);
-        // Set the puzzle in the game hook (this would need to be implemented in useGame)
+      console.log('[onGameStart] Game started:', {
+        code: gameInfo.code,
+        boardSize: gameInfo.boardSize,
+        hasPuzzle: !!gameInfo.puzzleJson,
+        hasConstraints: !!gameInfo.constraintsJson
+      });
+
+      if (gameInfo.puzzleJson && gameInfo.boardSize) {
+        // Load the multiplayer puzzle from puzzleJson
+        try {
+          const puzzle = JSON.parse(gameInfo.puzzleJson);
+          let constraints;
+          if (gameInfo.constraintsJson) {
+            try {
+              constraints = JSON.parse(gameInfo.constraintsJson);
+            } catch (error) {
+              console.error('Failed to parse constraintsJson:', error);
+              constraints = undefined;
+            }
+          }
+
+          console.log('[onGameStart] Loading puzzle:', {
+            puzzleSize: puzzle.length,
+            puzzleHash: JSON.stringify(puzzle).substring(0, 50),
+            constraintsCount: constraints?.length || 0
+          });
+
+          loadMultiplayerBoard(puzzle, gameInfo.boardSize, constraints);
+        } catch (error) {
+          console.error('Failed to parse puzzleJson:', error);
+        }
       }
     },
     onOpponentMove: (moveData) => {
@@ -182,7 +211,20 @@ export default function Home() {
         const puzzleBoard = PuzzleGenerator.generatePuzzle(size, difficulty);
         const solution = GameLogic.solve(puzzleBoard.values);
         if (solution) {
-          const gameInfo = await createGame(size, puzzleBoard.values, solution);
+          console.log('[handleInvitePlayer] Creating game with puzzle:', {
+            size,
+            difficulty,
+            puzzleHash: JSON.stringify(puzzleBoard.values).substring(0, 50),
+            constraintsCount: puzzleBoard.constraints?.length || 0
+          });
+
+          const gameInfo = await createGame(size, puzzleBoard.values, solution, puzzleBoard.constraints);
+
+          console.log('[handleInvitePlayer] Game created:', {
+            code: gameInfo.code,
+            puzzleMatchesServer: JSON.stringify(puzzleBoard.values) === gameInfo.puzzleJson
+          });
+
           setShowInviteModal(true);
         }
       } catch (error) {
@@ -195,7 +237,7 @@ export default function Home() {
     setShowJoinModal(true);
   };
 
-  const handleJoinGameConfirm = async (gameInfo: any) => {
+  const handleJoinGameConfirm = async (gameInfo: GameInfo) => {
     try {
       await joinGame(gameInfo);
       setShowJoinModal(false);
@@ -262,6 +304,7 @@ export default function Home() {
                 onCompletionModalClose={() => {
                   // Handle completion modal close if needed
                 }}
+                onPlayNext={playNext}
               />
             </div>
 

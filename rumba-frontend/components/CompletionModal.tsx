@@ -11,6 +11,7 @@ interface CompletionModalProps {
   isMultiplayer: boolean;
   difficulty: string;
   size: number;
+  onPlayNext?: () => void;
 }
 
 const CompletionModal: React.FC<CompletionModalProps> = ({
@@ -21,7 +22,8 @@ const CompletionModal: React.FC<CompletionModalProps> = ({
   opponentMoves,
   isMultiplayer,
   difficulty,
-  size
+  size,
+  onPlayNext
 }) => {
   if (!isOpen) return null;
 
@@ -157,7 +159,10 @@ const CompletionModal: React.FC<CompletionModalProps> = ({
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
             <button
-              onClick={onClose}
+              onClick={() => {
+                onPlayNext?.();
+                onClose();
+              }}
               className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white py-2.5 sm:py-3 px-4 rounded-lg sm:rounded-xl font-medium hover:from-purple-700 hover:to-blue-700 transition-all duration-200 transform hover:scale-105 text-sm sm:text-base"
             >
               Chơi tiếp

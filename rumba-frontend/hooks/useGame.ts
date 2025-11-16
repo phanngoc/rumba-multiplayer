@@ -33,6 +33,8 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
   const [showFireworks, setShowFireworks] = useState(false);
   const [moveCount, setMoveCount] = useState(0);
   const [opponentMoves, setOpponentMoves] = useState<number | null>(null);
+  const [puzzleKey, setPuzzleKey] = useState(0);
+  const [isMultiplayerGame, setIsMultiplayerGame] = useState(false);
 
   // Update game state when board changes
   const updateGameState = useCallback((board: GameBoard, immutable?: ImmutableBoard, newConstraints?: PairConstraint[]) => {
@@ -234,8 +236,88 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
     setSize(prevSize => prevSize);
   }, []);
 
+  // Play next puzzle - create new puzzle with same size and difficulty
+  const playNext = useCallback(() => {
+    // Reset game state
+    setHintPosition(null);
+    setStartTime(null);
+    setCompletionTime(null);
+    setIsCompleted(false);
+    setShowFireworks(false);
+    setMoveCount(0);
+    // Increment puzzleKey to trigger useEffect
+    setPuzzleKey(prev => prev + 1);
+  }, []);
+
+  // Load multiplayer board from puzzleJson
+  const loadMultiplayerBoard = useCallback((puzzle: GameBoard, boardSize: number, constraints?: PairConstraint[]) => {
+    setIsLoading(true);
+
+    // CRITICAL: Mark as multiplayer game FIRST to prevent auto-generation race condition
+    setIsMultiplayerGame(true);
+
+    try {
+      // Set size
+      setSize(boardSize);
+
+      // Set original puzzle (deep copy to prevent reference issues)
+      const puzzleCopy = GameLogic.copyBoard(puzzle);
+      setOriginalPuzzle(puzzleCopy);
+
+      // Set current board to puzzle (start from beginning with deep copy)
+      setCurrentBoard(GameLogic.copyBoard(puzzleCopy));
+
+      // Set immutable cells based on initial puzzle values
+      // Cells with initial values (non-empty) are immutable
+      const immutable: ImmutableBoard = puzzle.map(row =>
+        row.map(cell => cell !== CellValue.EMPTY)
+      );
+      setImmutableCells(immutable);
+
+      // Reset game state
+      setHintPosition(null);
+      setStartTime(null);
+      setCompletionTime(null);
+      setIsCompleted(false);
+      setShowFireworks(false);
+      setMoveCount(0);
+
+      // Update game state with puzzle and constraints
+      const validation = GameLogic.validateBoard(puzzleCopy, constraints);
+      const isComplete = GameLogic.isComplete(puzzleCopy);
+
+      setGameState({
+        board: puzzleCopy,
+        immutable,
+        constraints: constraints || [],
+        size: boardSize,
+        isComplete,
+        isValid: validation.isValid,
+        errors: validation.errors
+      });
+
+      console.log('[loadMultiplayerBoard] Board loaded successfully:', {
+        boardSize,
+        hasConstraints: !!constraints,
+        constraintsCount: constraints?.length || 0,
+        puzzleHash: JSON.stringify(puzzleCopy).substring(0, 50) // Debug hash
+      });
+    } catch (error) {
+      console.error('Failed to load multiplayer board:', error);
+      // Reset multiplayer flag on error
+      setIsMultiplayerGame(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   // Generate new puzzle when size or difficulty changes
+  // Skip if this is a multiplayer game (puzzle loaded from server)
   useEffect(() => {
+    if (isMultiplayerGame) {
+      return; // Don't auto-generate puzzle for multiplayer games
+    }
+    
     const generatePuzzle = async () => {
       setIsLoading(true);
       setHintPosition(null);
@@ -320,7 +402,7 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
     };
     
     generatePuzzle();
-  }, [size, difficulty]);
+  }, [size, difficulty, puzzleKey, isMultiplayerGame]);
 
   // Calculate completion time
   const getCompletionTime = useCallback(() => {
@@ -362,8 +444,10 @@ export const useGame = (initialSize: number = 6, initialDifficulty: GameDifficul
     resetBoard,
     showSolution,
     generateNewPuzzle,
+    playNext,
     handleSizeChange,
     handleDifficultyChange,
-    setOpponentMoves
+    setOpponentMoves,
+    loadMultiplayerBoard
   };
 };
