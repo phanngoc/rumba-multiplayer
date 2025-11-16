@@ -343,29 +343,11 @@ const GameBoard: React.FC<GameBoardProps> = ({
       const isHorizontal = cell1.row === cell2.row; // Same row, different columns
       const isVertical = cell1.col === cell2.col; // Same column, different rows
       
-      // Calculate icon position based on constraint direction
-      // Icon should be placed exactly in the middle of the gap between two adjacent cells
-      let iconX: number;
-      let iconY: number;
-      
-      if (isHorizontal) {
-        // Horizontal constraint: place in the middle of vertical gap between cells
-        // Right edge of cell1 + half of gap = cell1Pos.x + cellSizeX/2 + gapPercentageX/2
-        iconX = cell1Pos.x + (cellSizeX / 2) + (gapPercentageX / 2);
-        // Y position is the same for both cells (same row)
-        iconY = cell1Pos.y;
-      } else if (isVertical) {
-        // Vertical constraint: place in the middle of horizontal gap between cells
-        // X position is the same for both cells (same column)
-        iconX = cell1Pos.x;
-        // Bottom edge of cell1 + half of gap = cell1Pos.y + cellSizeY/2 + gapPercentageY/2
-        iconY = cell1Pos.y + (cellSizeY / 2) + (gapPercentageY / 2);
-      } else {
-        // Fallback: diagonal constraint (shouldn't happen based on puzzle generator)
-        // Use midpoint for both
-        iconX = (cell1Pos.x + cell2Pos.x) / 2;
-        iconY = (cell1Pos.y + cell2Pos.y) / 2;
-      }
+      // Calculate icon position using midpoint formula
+      // Icon should be placed exactly in the middle between two cell centers
+      // The midpoint of two cell centers naturally falls in the gap between them
+      const iconX = (cell1Pos.x + cell2Pos.x) / 2;
+      const iconY = (cell1Pos.y + cell2Pos.y) / 2;
       
       // Debug logs for constraint positioning
       console.log(`[DEBUG Constraint ${id}]`, {
@@ -486,15 +468,16 @@ const GameBoard: React.FC<GameBoardProps> = ({
             </div>
 
             {/* Game Board */}
-            <div 
+            <div
               ref={boardContainerRef}
               className={`
-                game-board inline-grid gap-1 sm:gap-2 p-3 sm:p-4 
-                bg-gradient-to-br from-gray-50 to-gray-100 
+                game-board inline-grid gap-1 sm:gap-2 p-3 sm:p-4
+                bg-gradient-to-br from-gray-50 to-gray-100
                 rounded-xl shadow-lg border border-gray-200
                 max-w-full overflow-hidden
+                relative
               `}
-              style={{ 
+              style={{
                 gridTemplateColumns: `repeat(${size}, 1fr)`,
                 maxWidth: size === 8 ? '90vw' : size === 6 ? '85vw' : '80vw'
               }}
@@ -524,6 +507,28 @@ const GameBoard: React.FC<GameBoardProps> = ({
                     </span>
                   </button>
                 ))
+              )}
+
+              {/* Constraint indicators overlay - positioned inside game board for coordinate alignment */}
+              {constraints && constraints.length > 0 && (
+                <svg
+                  id="constraint-indicators-svg"
+                  width="100%"
+                  height="100%"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="xMidYMid meet"
+                  className="w-full h-full pointer-events-none"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    zIndex: 10
+                  }}
+                >
+                  {renderConstraintIndicators()}
+                </svg>
               )}
             </div>
 
@@ -574,33 +579,6 @@ const GameBoard: React.FC<GameBoardProps> = ({
               );
             })}
           </div>
-          
-          {/* Constraint indicators overlay */}
-          {constraints && constraints.length > 0 && (
-            <div
-              id="constraint-indicators-overlay"
-              className="absolute inset-0 w-full h-full pointer-events-none"
-              style={{ zIndex: 10 }}
-            >
-              <svg
-                id="constraint-indicators-svg"
-                width="100%"
-                height="100%"
-                viewBox="0 0 100 100"
-                preserveAspectRatio="xMidYMid meet"
-                className="w-full h-full"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%'
-                }}
-              >
-                {renderConstraintIndicators()}
-              </svg>
-            </div>
-          )}
         </div>
       </div>
 
